@@ -39,6 +39,10 @@
 // * GET /groups/{id}/members - получить список членов группы
 // * GET /groups/{id}/admins - получить список администраторов группы
 
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use tide::Request;
+
 enum Access
 {
     User,
@@ -48,36 +52,49 @@ enum Access
 struct UserGroup
 {
     user_id: u32,
-    santa_id: u32 = -1,
+    santa_id: u32,
     group_id: u32,
     access_level: Access,
 }
 
-fn main()
+struct DataBase
+{
+    users: HashMap<u32, String>,
+    groups: HashMap<u32, bool>,
+    user_groups: HashSet<UserGroup>,
+}
+
+fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
-        let users: HashMap<u32, String> = HashMap::new();
-        let groups: HashMap<u32, bool> = HashMap::new();
-        let user_groups: HashSet<UserGroup> = HashSet::new();
-
-        let state = Arc::new(Mutex::new((users, groups, user_groups)));
+        let mut data = DataBase
+        {
+            users: HashMap::new(),
+            groups: HashMap::new(),
+            user_groups: HashSet::new(),
+        };
+        data.users.insert(0, "Ilya".to_string());
+        data.users.insert(1, "Stepan".to_string());
+        data.groups.insert(0, true);
+        data.groups.insert(1, false);
+        let state = Arc::new(Mutex::new(data));
 
         let mut app = tide::with_state(state);
 
         app.at("/users")
-            .get(|mut request: Request<Arc<Mutex<Tuple>>>| async move {
+            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.0.all_as_jsonarray)
+                Ok(serde_json::json!(guard.users))
             });
         app.at("/groups")
-            .get(|mut request: Request<Arc<Mutex<Tuple>>>| async move {
+            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.1.all_as_jsonarray)
+                Ok(serde_json::json!(guard.groups))
             });
 
         app.listen("127.0.0.1:8080").await
-    }
+    };
     futures::executor::block_on(f)
 }
