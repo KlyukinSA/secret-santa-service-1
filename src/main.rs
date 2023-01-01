@@ -39,6 +39,45 @@
 // * GET /groups/{id}/members - получить список членов группы
 // * GET /groups/{id}/admins - получить список администраторов группы
 
-fn main(){
-    // TODO: implement
+enum Access
+{
+    User,
+    Admin,
+}
+
+struct UserGroup
+{
+    user_id: u32,
+    santa_id: u32 = -1,
+    group_id: u32,
+    access_level: Access,
+}
+
+fn main()
+{
+    let f = async {
+        let users: HashMap<u32, String> = HashMap::new();
+        let groups: HashMap<u32, bool> = HashMap::new();
+        let user_groups: HashSet<UserGroup> = HashSet::new();
+
+        let state = Arc::new(Mutex::new((users, groups, user_groups)));
+
+        let mut app = tide::with_state(state);
+
+        app.at("/users")
+            .get(|mut request: Request<Arc<Mutex<Tuple>>>| async move {
+                let state = request.state();
+                let guard = state.lock().unwrap();
+                Ok(serde_json::json!(guard.0.all_as_jsonarray)
+            });
+        app.at("/groups")
+            .get(|mut request: Request<Arc<Mutex<Tuple>>>| async move {
+                let state = request.state();
+                let guard = state.lock().unwrap();
+                Ok(serde_json::json!(guard.1.all_as_jsonarray)
+            });
+
+        app.listen("127.0.0.1:8080").await
+    }
+    futures::executor::block_on(f)
 }
