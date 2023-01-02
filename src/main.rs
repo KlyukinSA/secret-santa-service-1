@@ -39,7 +39,7 @@
 // * GET /groups/{id}/members - получить список членов группы
 // * GET /groups/{id}/admins - получить список администраторов группы
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tide::Request;
 
@@ -49,19 +49,23 @@ enum Access
     Admin,
 }
 
-struct UserGroup
+#[derive(Eq, Hash, PartialEq)]
+struct UserGroupId
 {
     user_id: u32,
-    santa_id: u32,
     group_id: u32,
+}
+struct UserGroupProps
+{
     access_level: Access,
+    santa_id: u32,
 }
 
 struct DataBase
 {
     users: HashMap<u32, String>,
     groups: HashMap<u32, bool>,
-    user_groups: HashSet<UserGroup>,
+    user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -71,24 +75,48 @@ fn main() -> Result<(), std::io::Error>
         {
             users: HashMap::new(),
             groups: HashMap::new(),
-            user_groups: HashSet::new(),
+            user_groups: HashMap::new(),
         };
         data.users.insert(0, "Ilya".to_string());
         data.users.insert(1, "Stepan".to_string());
-        data.groups.insert(0, true);
+        data.groups.insert(0, false);
         data.groups.insert(1, false);
+        data.user_groups.insert(
+            UserGroupId
+            {
+                user_id: 0,
+                group_id: 0,
+            },
+            UserGroupProps
+            {
+                access_level: Access::Admin,
+                santa_id: 0,
+            }
+        );
+        data.user_groups.insert(
+            UserGroupId
+            {
+                user_id: 1,
+                group_id: 1,
+            },
+            UserGroupProps
+            {
+                access_level: Access::Admin,
+                santa_id: 0,
+            }
+        );
         let state = Arc::new(Mutex::new(data));
 
         let mut app = tide::with_state(state);
 
         app.at("/users")
-            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
                 Ok(serde_json::json!(guard.users))
             });
         app.at("/groups")
-            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
                 Ok(serde_json::json!(guard.groups))
