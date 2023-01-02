@@ -49,23 +49,30 @@ enum Access
     Admin,
 }
 
+type Id = u32;
+
 #[derive(Eq, Hash, PartialEq)]
 struct UserGroupId
 {
-    user_id: u32,
-    group_id: u32,
+    user_id: Id,
+    group_id: Id,
 }
 struct UserGroupProps
 {
     access_level: Access,
-    santa_id: u32,
+    santa_id: Id,
 }
 
 struct DataBase
 {
-    users: HashMap<u32, String>,
-    groups: HashMap<u32, bool>,
+    users: HashMap<Id, String>,
+    groups: HashMap<Id, bool>,
     user_groups: HashMap<UserGroupId, UserGroupProps>,
+}
+
+fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
+{
+    2 //
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -120,6 +127,15 @@ fn main() -> Result<(), std::io::Error>
                 let state = request.state();
                 let guard = state.lock().unwrap();
                 Ok(serde_json::json!(guard.groups))
+            });
+        app.at("/users")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let name = request.body_string().await?;
+                let state = request.state();
+                let mut guard = state.lock().unwrap();
+                let id = get_not_used_in_map_id(&guard.users);
+                guard.users.insert(id, name);
+                Ok(serde_json::json!(id))
             });
 
         app.listen("127.0.0.1:8080").await
