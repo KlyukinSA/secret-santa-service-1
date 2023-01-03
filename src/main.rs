@@ -42,6 +42,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tide::Request;
+use serde_json::{Value, json};
 
 enum Access
 {
@@ -72,7 +73,7 @@ struct DataBase
 
 fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
-    2 //
+    2 // TODO
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -120,22 +121,35 @@ fn main() -> Result<(), std::io::Error>
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.users))
+                Ok(json!(guard.users))
             });
         app.at("/groups")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.groups))
+                Ok(json!(guard.groups))
             });
         app.at("/users")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let name = request.body_string().await?;
-                let state = request.state();
-                let mut guard = state.lock().unwrap();
-                let id = get_not_used_in_map_id(&guard.users);
-                guard.users.insert(id, name);
-                Ok(serde_json::json!(id))
+                let body: Option<Value> = request.body_json().await.ok();
+                match body.and_then(
+                    |value| value.as_object().and_then(
+                        |object| object.get("name").and_then(
+                            |value| value.as_str().and_then(
+                                |name| 
+                                {
+                                    let state = request.state();
+                                    let mut guard = state.lock().unwrap();
+                                    let id = get_not_used_in_map_id(&guard.users);
+                                    guard.users.insert(id, name.to_string());
+                                    let mut res = json!({"id": "0"});
+                                    res["id"] = json!(id);
+                                    Some(res)
+                                }))))
+                {
+                    Some(res) => Ok(res),
+                    None => Ok(json!({"error": "cant read name"})),
+                }
             });
 
         app.listen("127.0.0.1:8080").await
