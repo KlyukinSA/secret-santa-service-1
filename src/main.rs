@@ -130,7 +130,7 @@ fn main() -> Result<(), std::io::Error>
             });
         app.at("/users")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let name = request.body_string().await?;
+                let name: String = request.body_json().await?;
                 let state = request.state();
                 let mut guard = state.lock().unwrap();
                 let id = get_not_used_in_map_id(&guard.users);
