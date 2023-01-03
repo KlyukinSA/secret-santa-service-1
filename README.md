@@ -13,7 +13,7 @@
 ## Как тестировать
 
 1. Запустить решение
-2. Сделать http запрос. Проще всего использовать cli-программу curl. Например, `curl --header "Content-Type: application/json" --request POST --data '{"name":"Danis"}' http://127.0.0.1:8080/users` добавит Даниса в список пользователей и выведет его айдишник.
+2. Сделать http запрос. Проще всего использовать cli-программу curl. Например, `curl --header "Content-Type: application/json" --request POST --data '{"name":"Danis"}' http://127.0.0.1:8080/user/create` добавит Даниса в список пользователей и выведет его айдишник.
 
 ## А если без курла?
 

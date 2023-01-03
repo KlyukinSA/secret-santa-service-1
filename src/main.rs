@@ -34,7 +34,7 @@ struct DataBase
 
 fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
-    2 // TODO
+    *map.keys().max().unwrap() + 1
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -49,7 +49,7 @@ fn main() -> Result<(), std::io::Error>
         
         // Mock data (данные для тестирования)
         data.users.insert(0, "Ilya".to_string());
-        data.users.insert(1, "Stepan".to_string());
+        data.users.insert(2, "Stepan".to_string());
         data.groups.insert(0, false);
         data.groups.insert(1, false);
         data.user_groups.insert(
@@ -67,7 +67,7 @@ fn main() -> Result<(), std::io::Error>
         data.user_groups.insert(
             UserGroupId
             {
-                user_id: 1,
+                user_id: 2,
                 group_id: 1,
             },
             UserGroupProps
@@ -100,15 +100,13 @@ fn main() -> Result<(), std::io::Error>
                     |value| value.as_object().and_then(
                     |object| object.get("name").and_then(
                     |value| value.as_str().and_then(
-                    |name| 
+                    |name|
                     {
                         let state = request.state();
                         let mut guard = state.lock().unwrap();
                         let id = get_not_used_in_map_id(&guard.users);
                         guard.users.insert(id, name.to_string());
-                        let mut res = json!({"id": "0"});
-                        res["id"] = json!(id);
-                        Some(res)
+                        Some(json!({"id": id}))
                     }
                 ))))
                 {
