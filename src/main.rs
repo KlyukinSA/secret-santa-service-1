@@ -42,7 +42,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tide::Request;
-
+use serde_json::{Value, json};
 enum Access
 {
     User,
@@ -120,22 +120,47 @@ fn main() -> Result<(), std::io::Error>
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.users))
+                Ok(json!(guard.users))
             });
         app.at("/groups")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let state = request.state();
                 let guard = state.lock().unwrap();
-                Ok(serde_json::json!(guard.groups))
+                Ok(json!(guard.groups))
             });
         app.at("/users")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let name: String = request.body_json().await?;
-                let state = request.state();
-                let mut guard = state.lock().unwrap();
-                let id = get_not_used_in_map_id(&guard.users);
-                guard.users.insert(id, name);
-                Ok(serde_json::json!(id))
+                let err_obj = json!({"error": "cant read name"});
+                let value: Option<Value> = request.body_json().await.ok();
+                if let Some(value) = value
+                {
+                    if let Some(object) = value.as_object()
+                    {
+                        if let Some(name) = object.get("name")
+                        {
+                            let state = request.state();
+                            let mut guard = state.lock().unwrap();
+                            let id = get_not_used_in_map_id(&guard.users);
+                            guard.users.insert(id, name.to_string());
+                            let result = json!({"id": "0"});
+                            Ok(result)
+                        }
+                        else
+                        {
+                            Ok(err_obj)
+                        }
+                    }
+                    else
+                    {
+                        Ok(err_obj)
+                    }
+                }
+                else
+                {
+                    Ok(err_obj)
+                }
+                
+                //Ok(value.unwrap_or(err_obj))
             });
 
         app.listen("127.0.0.1:8080").await
