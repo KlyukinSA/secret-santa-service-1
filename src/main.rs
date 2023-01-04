@@ -103,11 +103,16 @@ fn main() -> Result<(), std::io::Error>
                     let mut guard = request.state().lock().unwrap();
                     let id = get_not_used_in_map_id(&guard.users);
                     guard.users.insert(id, name.to_string());
-                    Ok(json!({"id": id}))
+
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"id": id}))?)
+                        .build())
                 }
                 else
                 {
-                    Ok(json!({"error": "bad name"}))
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad name"}))?)
+                        .build())
                 }
             });
         app.listen("127.0.0.1:8080").await
