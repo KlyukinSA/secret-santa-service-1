@@ -37,6 +37,23 @@ fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
     *map.keys().max().unwrap() + 1
 }
 
+fn user_create(object: &serde_json::Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Result<Value, String>
+{
+    let name = object.get("name").unwrap().as_str().unwrap();
+    if name.len() > 0
+    {
+        let mut guard = state.lock().unwrap();
+        let id = get_not_used_in_map_id(&guard.users);
+        guard.users.insert(id, name.to_string());
+
+        Ok(json!({"id": id}))
+    }
+    else
+    {
+        Err("bad name".to_string())
+    }
+}
+
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
@@ -83,38 +100,29 @@ fn main() -> Result<(), std::io::Error>
         // Routes
         app.at("/users")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
-                let state = request.state();
-                let guard = state.lock().unwrap();
+                let guard = request.state().lock().unwrap();
                 Ok(json!(guard.users))
             });
         app.at("/groups")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
-                let state = request.state();
-                let guard = state.lock().unwrap();
+                let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let name = object.get("name").unwrap().as_str().unwrap();
-                if name.len() > 0
+                Ok(match user_create(object, request.state())
                 {
-                    let mut guard = request.state().lock().unwrap();
-                    let id = get_not_used_in_map_id(&guard.users);
-                    guard.users.insert(id, name.to_string());
-
-                    Ok(tide::Response::builder(200)
-                        .body(tide::Body::from_json(&json!({"id": id}))?)
-                        .build())
-                }
-                else
-                {
-                    Ok(tide::Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad name"}))?)
-                        .build())
-                }
+                    Ok(value) => tide::Response::builder(200)
+                        .body(tide::Body::from_json(&value)?)
+                        .build(),
+                    Err(msg) => tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": msg}))?)
+                        .build(),
+                })
             });
+        
         app.listen("127.0.0.1:8080").await
     };
     
