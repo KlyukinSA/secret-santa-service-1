@@ -95,23 +95,24 @@ fn main() -> Result<(), std::io::Error>
             });
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let body: Option<Value> = request.body_json().await.ok();
-                match body.and_then(
-                    |value| value.as_object().and_then(
-                    |object| object.get("name").and_then(
-                    |value| value.as_str().and_then(
-                    |name|
-                    {
-                        let state = request.state();
-                        let mut guard = state.lock().unwrap();
-                        let id = get_not_used_in_map_id(&guard.users);
-                        guard.users.insert(id, name.to_string());
-                        Some(json!({"id": id}))
-                    }
-                ))))
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let name = object.get("name").unwrap().as_str().unwrap();
+                if name.len() > 0
                 {
-                    Some(res) => Ok(res),
-                    None => Ok(json!({"error": "cant read name"})),
+                    let mut guard = request.state().lock().unwrap();
+                    let id = get_not_used_in_map_id(&guard.users);
+                    guard.users.insert(id, name.to_string());
+
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"id": id}))?)
+                        .build())
+                }
+                else
+                {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad name"}))?)
+                        .build())
                 }
             });
         app.listen("127.0.0.1:8080").await
