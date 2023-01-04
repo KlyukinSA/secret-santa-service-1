@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::Request;
 use serde_json::{Value, json, Map};
 
+#[derive(PartialEq)]
 enum Access
 {
     User,
@@ -163,6 +164,41 @@ fn main() -> Result<(), std::io::Error>
                         .build())
                 }
             });
+        app.at("/group/quit")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id : Id = get_field(object, "group_id");
+                let user_id : Id = get_field(object, "user_id");
+                let guard = request.state().lock().unwrap();
+                if guard.user_groups.contains_key(&UserGroupId{ user_id: (user_id), group_id: (group_id) })
+                {
+                    let temp_user_group_id = guard.user_groups.get(&UserGroupId { user_id: (user_id), group_id: (group_id) });
+                    if temp_user_group_id.unwrap().access_level == Access::User
+                    {
+                        Ok(tide::Response::builder(200).build())
+                    }
+                    else
+                    {
+                        if true // TODO: waiting list_admins
+                        {
+                            Ok(tide::Response::builder(200).build())
+                        }
+                        else
+                        {
+                            Ok(tide::Response::builder(400)
+                                .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
+                                .build())
+                        }
+                    }
+                }
+                else
+                {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad group_id and/or user_id"}))?)
+                        .build())
+                }
+                });
         app.listen("127.0.0.1:8080").await
     };
     
