@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::Request;
 use serde_json::{Value, json};
 
+#[derive(PartialEq)]
 enum Access
 {
     User,
@@ -145,6 +146,47 @@ fn main() -> Result<(), std::io::Error>
                 {
                     Ok(tide::Response::builder(400)
                         .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
+                        .build())
+                }
+            });
+        app.at("/group/make_admin")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id = object.get("group_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
+                let member_id = object.get("member_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
+                let admin_id = object.get("admin_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
+
+                let mut guard = request.state().lock().unwrap();
+                if guard.user_groups.contains_key(
+                    &UserGroupId {
+                        user_id: member_id,
+                        group_id,
+                    }
+                )
+                && guard.user_groups.get(
+                    &UserGroupId {
+                        user_id: admin_id,
+                        group_id,
+                    }
+                ).unwrap().access_level == Access::Admin {
+                    guard.user_groups.insert(
+                        UserGroupId {
+                            user_id: member_id,
+                            group_id,
+                        },
+                        UserGroupProps {
+                            access_level: Access::Admin,
+                            santa_id: 0,
+                        }
+                    );
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({guard.users.get(&member_id).unwrap(): "is admin now"}))?)
+                        .build())
+                }
+                else {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad id or group"}))?)
                         .build())
                 }
             });
