@@ -133,7 +133,8 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let creator_id :u32 = object.get("creator_id").unwrap().as_str().unwrap().parse().unwrap();
+
+                let creator_id: Id = get_field(object, "creator_id");
                 let mut guard = request.state().lock().unwrap();
                 if guard.users.contains_key(&creator_id)
                 {
