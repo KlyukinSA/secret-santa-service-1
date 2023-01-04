@@ -74,6 +74,7 @@ fn main() -> Result<(), std::io::Error>
         
         // Mock data (данные для тестирования)
         data.users.insert(0, "Ilya".to_string());
+        data.users.insert(3, "Serega".to_string());
         data.users.insert(2, "Stepan".to_string());
         data.groups.insert(0, false);
         data.groups.insert(1, false);
@@ -86,6 +87,18 @@ fn main() -> Result<(), std::io::Error>
             UserGroupProps
             {
                 access_level: Access::Admin,
+                santa_id: 0,
+            }
+        );
+        data.user_groups.insert(
+            UserGroupId
+            {
+                user_id: 3,
+                group_id: 1,
+            },
+            UserGroupProps
+            {
+                access_level: Access::User,
                 santa_id: 0,
             }
         );
@@ -168,17 +181,17 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let group_id = object.get("group_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
-                let member_id = object.get("member_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
-                let admin_id = object.get("admin_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
+                let group_id = get_field(object, "group_id");
+                let member_id = get_field(object, "member_id");
+                let admin_id = get_field(object, "admin_id");
 
                 let mut guard = request.state().lock().unwrap();
-                if guard.user_groups.contains_key(
+                if guard.user_groups.get(
                     &UserGroupId {
                         user_id: member_id,
                         group_id,
                     }
-                )
+                ).unwrap().access_level != Access::Admin
                 && guard.user_groups.get(
                     &UserGroupId {
                         user_id: admin_id,
