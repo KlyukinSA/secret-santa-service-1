@@ -172,17 +172,44 @@ fn main() -> Result<(), std::io::Error>
                 user_group_id.group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                if !guard.groups.get(&user_group_id.group_id).unwrap()
+                Ok(match guard.groups.get(&user_group_id.group_id)
                 {
-                    if guard.users.contains_key(&user_group_id.user_id)
+                    None => tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "no such group"}))?)
+                        .build(),
+                    Some(is_closed) => 
                     {
-                        if !guard.user_groups.contains_key(&user_group_id)
+                        if *is_closed
                         {
-                            guard.user_groups.insert(user_group_id, UserGroupProps{access_level: Access::User, santa_id: 0});
+                            tide::Response::builder(400)
+                                .body(tide::Body::from_json(&json!({"error": "group is closed"}))?)
+                                .build()
+                        }
+                        else
+                        {
+                            if !guard.users.contains_key(&user_group_id.user_id)
+                            {
+                                tide::Response::builder(400)
+                                    .body(tide::Body::from_json(&json!({"error": "no such user"}))?)
+                                    .build()
+                            }
+                            else
+                            {
+                                if guard.user_groups.contains_key(&user_group_id)
+                                {
+                                    tide::Response::builder(400)
+                                        .body(tide::Body::from_json(&json!({"error": "user already in group"}))?)
+                                        .build()
+                                }
+                                else
+                                {
+                                    guard.user_groups.insert(user_group_id, UserGroupProps{access_level: Access::User, santa_id: 0});
+                                    tide::Response::builder(200).build()
+                                }
+                            }
                         }
                     }
-                }
-                Ok(tide::Response::new(tide::StatusCode::Ok))
+                })
             });
         
         app.listen("127.0.0.1:8080").await
