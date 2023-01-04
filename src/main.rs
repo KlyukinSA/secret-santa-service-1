@@ -163,7 +163,30 @@ fn main() -> Result<(), std::io::Error>
                         .build())
                 }
             });
-        app.listen("127.0.0.1:8080").await
+        app.at("/group/target_by_id")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let user_id: Id = get_field(object, "user_id");
+                let group_id: Id = get_field(object, "group_id");
+                let from_user = UserGroupId{
+                    user_id,
+                    group_id
+                };
+                let mut guard = request.state().lock().unwrap();
+                if(guard.user_groups.contains_key(&from_user)){
+                    let need_user  = guard.user_groups.get(&from_user).unwrap();
+                    let need_user_id = need_user.santa_id;
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"id": need_user_id}))?)
+                        .build())
+                } else {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad user or group id"}))?)
+                        .build())
+                }
+            });
+            app.listen("127.0.0.1:8080").await
     };
     
     futures::executor::block_on(f)
