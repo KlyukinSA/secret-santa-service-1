@@ -21,7 +21,7 @@
 
 - В PowerShell пишите строчку по шаблону:
 ```powershell 
-Invoke-RestMethod -ContentType "application/json" -Uri "http://127.0.0.1:8080/ОБЪЕКТ" -Method СУБЪЕКТ -Body ВХОДНЫЕ ДАННЫЕ
+Invoke-RestMethod -ContentType "application/json" -Uri "http://127.0.0.1:8080/HTTP-путь" -Method HTTP-метод -Body ВХОДНЫЕ_ДАННЫЕ
 ``` 
 Пример (добавляет пользователя "Danis" в список пользователей и выводит его ID): 
 ```powershell 
@@ -32,7 +32,7 @@ Invoke-RestMethod -ContentType "application/json" -Uri "http://127.0.0.1:8080/us
 
 - CLI-программа cURL. В ней пишите строчку по шаблону:
 ```bash
-curl --header "Content-Type: application/json" --request СУБЪЕКТ --data ВХОДНЫЕ ДАННЫЕ http://127.0.0.1:8080/ОБЪЕКТ
+curl --header "Content-Type: application/json" --request HTTP-метод --data ВХОДНЫЕ_ДАННЫЕ http://127.0.0.1:8080/HTTP-путь
 ``` 
 Пример (добавляет пользователя "Danis" в список пользователей и выводит его ID): 
 ```bash
