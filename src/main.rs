@@ -129,7 +129,39 @@ fn main() -> Result<(), std::io::Error>
                         .build(),
                 })
             });
-        
+        app.at("/group/create")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let creator_id :u32 = object.get("creator_id").unwrap().as_str().unwrap().parse().unwrap();
+                let mut guard = request.state().lock().unwrap();
+                if guard.users.contains_key(&creator_id)
+                {
+                    let id = get_not_used_in_map_id(&guard.groups);
+                    guard.groups.insert(id, false);
+                    guard.user_groups.insert(
+                        UserGroupId
+                        {
+                            user_id: creator_id,
+                            group_id: id,
+                        },
+                        UserGroupProps
+                        {
+                            access_level: Access::Admin,
+                            santa_id: 0,
+                        }
+                    );
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"group_id": id}))?)
+                        .build())
+                }
+                else
+                {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
+                        .build())
+                }
+            });
         app.listen("127.0.0.1:8080").await
     };
     
