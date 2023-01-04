@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tide::Request;
-use serde_json::{Value, json};
+use serde_json::{Value, json, Map};
 
 enum Access
 {
@@ -32,19 +32,26 @@ struct DataBase
     user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
+fn get_field<T>(object: &serde_json::Map<String, Value>, key: &str) -> T
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Debug,
+{
+    object.get(key).unwrap().as_str().unwrap().parse().unwrap()
+}
+
 fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
     *map.keys().max().unwrap() + 1
 }
-
-fn user_create(object: &serde_json::Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Result<Value, String>
+fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Result<Value, String>
 {
-    let name = object.get("name").unwrap().as_str().unwrap();
+    let name: String = get_field(input_obj, "name");
     if name.len() > 0
     {
         let mut guard = state.lock().unwrap();
         let id = get_not_used_in_map_id(&guard.users);
-        guard.users.insert(id, name.to_string());
+        guard.users.insert(id, name);
 
         Ok(json!({"id": id}))
     }
