@@ -82,34 +82,16 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
 }
 
-fn does_user_belong_to_group(userId: Id, groupId: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)-> bool
+fn does_user_belong_to_group(user_id: Id, group_id: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)-> bool
 {
-   let mut isHere = false;
-   for cur_ug in user_groups
-   {
-        if cur_ug.0.group_id == groupId && cur_ug.0.user_id == userId
-        {
-            isHere = true;
-            break;
-        }
-    }
-    return isHere;
+    return user_groups.contains_key(&UserGroupId { user_id, group_id });
 }
 
-fn count_admins(groupId: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)->u32
+fn count_admins(group_id: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)->usize
 {
-    let mut count=0;
-    for cur_ug in user_groups
-   {
-        if cur_ug.0.group_id == groupId
-        {
-            if cur_ug.1.access_level == Access::Admin
-            {
-                count+=1;
-            }
-        }
-    }
-    return count;
+    let iter = user_groups.into_iter();
+    let collection = iter.filter(|&x| x.0.group_id == group_id && x.1.access_level == Access::Admin);
+    return collection.count();
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -265,7 +247,7 @@ fn main() -> Result<(), std::io::Error>
                 let mut guard = request.state().lock().unwrap();
                 if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("user does not belong to this group".to_string()))
+                    Ok(response_error("User does not belong to this group. Try again.".to_string()))
                 }
                 else 
                 {
@@ -275,7 +257,7 @@ fn main() -> Result<(), std::io::Error>
                     {
                         if count_admins(group_id, &guard.user_groups) < 2
                         {
-                            Ok(response_error("only one admin in this group".to_string()))
+                            Ok(response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.".to_string()))
                         }
                         else
                         {
@@ -286,7 +268,7 @@ fn main() -> Result<(), std::io::Error>
                     }
                     else
                     {
-                        Ok(response_error("not an admin".to_string()))
+                        Ok(response_error("This user is not an admin.".to_string()))
                     }
                     
                 }
