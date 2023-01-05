@@ -50,21 +50,21 @@ fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
     }
 }
 
-fn response_data(value: Value) -> tide::Response
+fn response_data(value: Value) -> Response
 {
-    tide::Response::builder(200)
+    Response::builder(200)
         .body(tide::Body::from_json(&value).unwrap())
         .build()
 }
 
-fn response_empty() -> tide::Response
+fn response_empty() -> Response
 {
-    tide::Response::builder(200).build()
+    Response::builder(200).build()
 }
 
-fn response_error(msg: String) -> tide::Response
+fn response_error(msg: &str) -> Response
 {
-    tide::Response::builder(400)
+    Response::builder(400)
         .body(tide::Body::from_json(&json!({"error": msg})).unwrap())
         .build()
 }
@@ -85,7 +85,7 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
     else
     {
-        response_error("bad name".to_string())
+        response_error("bad name")
     }
 }
 
@@ -207,41 +207,33 @@ fn main() -> Result<(), std::io::Error>
                 let mut guard = request.state().lock().unwrap();
                 Ok(match guard.groups.get(&user_group_id.group_id)
                 {
-                    None => Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "no such group"}))?)
-                        .build(),
+                    None => response_error("no such group"),
                     Some(is_closed) => 
                     {
                         if *is_closed
                         {
-                            Response::builder(400)
-                                .body(tide::Body::from_json(&json!({"error": "group is closed"}))?)
-                                .build()
+                            response_error("group is closed")
                         }
                         else
                         {
                             if !guard.users.contains_key(&user_group_id.user_id)
                             {
-                                Response::builder(400)
-                                    .body(tide::Body::from_json(&json!({"error": "no such user"}))?)
-                                    .build()
+                                response_error("no such user")
                             }
                             else
                             {
                                 if guard.user_groups.contains_key(&user_group_id)
                                 {
-                                    Response::builder(400)
-                                        .body(tide::Body::from_json(&json!({"error": "user already in group"}))?)
-                                        .build()
+                                    response_error("user already in group")
                                 }
                                 else
                                 {
                                     guard.user_groups.insert(user_group_id, UserGroupProps{access_level: Access::User, santa_id: 0});
-                                    Response::builder(200).build()
+                                    response_empty()
                                 }
                             }
                         }
-                    }
+                    },
                 })
             });
         
