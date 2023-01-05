@@ -186,8 +186,8 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else
                         {
-                            Ok(tide::Response::builder(400)
-                                .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
+                            Ok(tide::Response::builder(401)
+                                .body(tide::Body::from_json(&json!({"error": "user_id is only one Admin in group_id"}))?)
                                 .build())
                         }
                     }
