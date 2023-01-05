@@ -104,6 +104,7 @@ fn main() -> Result<(), std::io::Error>
         
         // Mock data (данные для тестирования)
         data.users.insert(0, "Ilya".to_string());
+        data.users.insert(1, "Yulia".to_string());
         data.users.insert(2, "Stepan".to_string());
         data.groups.insert(0, false);
         data.groups.insert(1, false);
@@ -124,6 +125,18 @@ fn main() -> Result<(), std::io::Error>
             {
                 user_id: 2,
                 group_id: 1,
+            },
+            UserGroupProps
+            {
+                access_level: Access::Admin,
+                santa_id: 0,
+            }
+        );
+        data.user_groups.insert(
+            UserGroupId
+            {
+                user_id: 1,
+                group_id: 0,
             },
             UserGroupProps
             {
@@ -207,23 +220,26 @@ fn main() -> Result<(), std::io::Error>
                           .body(tide::Body::from_json(&json!({"error": "user does not belong to this group"}))?)
                           .build())
                 }
-                else if count_admins(group_id, &guard.user_groups) < 2
-                {
-                    Ok(tide::Response::builder(400)
-                          .body(tide::Body::from_json(&json!({"error": "only one admin in this group"}))?)
-                          .build())
-                }
                 else 
                 {
                     let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
-                    let mut ugp = guard.user_groups.get_mut(&ugid).unwrap();
+                    let ugp = guard.user_groups.get(&ugid).unwrap();
                     if ugp.access_level == Access::Admin
                     {
-                        ugp.access_level = Access::User;
-                        Ok(tide::Response::builder(200)
-                        .body(tide::Body::from_json(&json!({"admin->user": admin_id}))?)
-                        .build())
-
+                        if count_admins(group_id, &guard.user_groups) < 2
+                        {
+                            Ok(tide::Response::builder(400)
+                                .body(tide::Body::from_json(&json!({"error": "only one admin in this group"}))?)
+                                .build())
+                        }
+                        else
+                        {
+                            let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
+                            ugp1.access_level = Access::User;
+                            Ok(tide::Response::builder(200)
+                                .body(tide::Body::from_json(&json!({"admin->user": admin_id}))?)
+                                .build())
+                        }    
                     }
                     else
                     {
@@ -231,6 +247,7 @@ fn main() -> Result<(), std::io::Error>
                             .body(tide::Body::from_json(&json!({"error": "not an admin"}))?)
                             .build())
                     }
+                    
                 }
             });
         app.listen("127.0.0.1:8080").await
@@ -238,4 +255,3 @@ fn main() -> Result<(), std::io::Error>
     
     futures::executor::block_on(f)
 }
-
