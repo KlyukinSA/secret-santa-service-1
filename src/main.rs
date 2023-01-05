@@ -50,21 +50,21 @@ fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
     }
 }
 
-fn response_data(value: Value) -> tide::Response
+fn response_data(value: Value) -> Response
 {
-    tide::Response::builder(200)
+    Response::builder(200)
         .body(tide::Body::from_json(&value).unwrap())
         .build()
 }
 
-fn response_empty() -> tide::Response
+fn response_empty() -> Response
 {
-    tide::Response::builder(200).build()
+    Response::builder(200).build()
 }
 
-fn response_error(msg: String) -> tide::Response
+fn response_error(msg: &str) -> Response
 {
-    tide::Response::builder(400)
+    Response::builder(400)
         .body(tide::Body::from_json(&json!({"error": msg})).unwrap())
         .build()
 }
@@ -85,7 +85,7 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
     else
     {
-        response_error("bad name".to_string())
+        response_error("bad name")
     }
 }
 
@@ -254,7 +254,7 @@ fn main() -> Result<(), std::io::Error>
                 let mut guard = request.state().lock().unwrap();
                 if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("User does not belong to this group. Try again.".to_string()))
+                    Ok(response_error("User does not belong to this group. Try again."))
                 }
                 else 
                 {
@@ -264,7 +264,7 @@ fn main() -> Result<(), std::io::Error>
                     {
                         if count_admins(group_id, &guard.user_groups) < 2
                         {
-                            Ok(response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.".to_string()))
+                            Ok(response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group."))
                         }
                         else
                         {
@@ -275,7 +275,7 @@ fn main() -> Result<(), std::io::Error>
                     }
                     else
                     {
-                        Ok(response_error("This user is not an admin.".to_string()))
+                        Ok(response_error("This user is not an admin."))
                     }
                     
                 }
