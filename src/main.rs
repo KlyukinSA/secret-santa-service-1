@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::{Request, Response};
 use serde_json::{Value, json, Map};
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Eq)]
 enum Access
 {
     User,
@@ -107,16 +107,27 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
 }
 
+fn does_user_belong_to_group(user_id: Id, group_id: Id, user_groups: &HashMap<UserGroupId,UserGroupProps>) -> bool
+{
+    return user_groups.contains_key(&UserGroupId { user_id, group_id });
+}
+
+fn count_admins(group_id: Id, user_groups: &HashMap<UserGroupId, UserGroupProps>) ->usize
+{
+    let iter = user_groups.into_iter();
+    let collection = iter.filter(|&x| x.0.group_id == group_id && x.1.access_level == Access::Admin);
+    return collection.count();
+}
+
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
-        let mut data = DataBase
+        let data = DataBase
         {
             users: HashMap::new(),
             groups: HashMap::new(),
             user_groups: HashMap::new(),
         };
-    
         let state = Arc::new(Mutex::new(data));
         let mut app = tide::with_state(state);
 
@@ -142,10 +153,14 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-
                 let creator_id: Id = get_field(object, "creator_id");
+
                 let mut guard = request.state().lock().unwrap();
-                if guard.users.contains_key(&creator_id)
+                Ok(if !guard.users.contains_key(&creator_id)
+                {
+                    response_error("no such user")
+                }
+                else
                 {
                     let id = get_not_used_in_map_id(&guard.groups);
                     guard.groups.insert(id, false);
@@ -161,16 +176,8 @@ fn main() -> Result<(), std::io::Error>
                             santa_id: 0,
                         }
                     );
-                    Ok(Response::builder(200)
-                        .body(tide::Body::from_json(&json!({"group_id": id}))?)
-                        .build())
-                }
-                else
-                {
-                    Ok(Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
-                        .build())
-                }
+                    response_data(json!({"group_id": id}))
+                })
             });
         app.at("/group/join")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
@@ -212,47 +219,7 @@ fn main() -> Result<(), std::io::Error>
                     },
                 })
             });
-        app.at("/group/make_admin")
-            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let body: Value = request.body_json().await?;
-                let object = body.as_object().unwrap();
-                let group_id: Id = get_field(object, "group_id");
-                let member_id: Id = get_field(object, "member_id");
-                let admin_id: Id = get_field(object, "admin_id");
-
-                let mut guard = request.state().lock().unwrap();
-                if !guard.users.contains_key(&member_id)
-                || !guard.users.contains_key(&admin_id)
-                {
-                    Ok(response_error("no such user or admin"))
-                }
-                else if !guard.groups.contains_key(&group_id)
-                {
-                    Ok(response_error("no such group"))
-                }
-                else if !guard.user_groups.contains_key(&UserGroupId{user_id: member_id, group_id})
-                {
-                    Ok(response_error("user isn't a member of the group"))
-                }
-                else if is_admin(member_id, group_id, &guard.user_groups)
-                {
-                    Ok(response_error("user is already an admin"))
-                }
-                else if !is_admin(admin_id, group_id, &guard.user_groups)
-                {
-                    Ok(response_error("admin_id isn't an actual admin's ID"))
-                }
-                else {
-                    guard.user_groups.insert(
-                        UserGroupId {
-                            user_id: member_id,
-                            group_id,
-                        },
-                        UserGroupProps::new(Access::Admin),
-                    );
-                    Ok(response_empty())
-                }
-            });
+        
         app.listen("127.0.0.1:8080").await
     };
     
