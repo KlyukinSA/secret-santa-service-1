@@ -206,16 +206,10 @@ fn main() -> Result<(), std::io::Error>
                             users_to_delete.push(user_group_id.user_id);
                         }
                     }
-                    for user_id in users_to_delete
-                    {
-                        guard.user_groups.remove(
-                            &UserGroupId
-                            {
-                                user_id: user_id,
-                                group_id: group_id,
-                            }
-                        );
-                    }
+
+                    guard.user_groups.retain(|user_group_id, _| {
+                        user_group_id.group_id != group_id
+                    });
 
                     guard.groups.remove(&group_id);
                     Ok(tide::Response::builder(200).build())
