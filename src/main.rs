@@ -272,7 +272,7 @@ fn main() -> Result<(), std::io::Error>
                         response_empty()
                     }
                 }
-            });
+            )});
         app.at("/group/quit")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
