@@ -1,6 +1,6 @@
 // # Веб-сервис секретного Санты.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map};
 use std::sync::{Arc, Mutex};
 use tide::{Request, Response};
 use serde_json::{Value, json, Map};
@@ -239,6 +239,70 @@ fn main() -> Result<(), std::io::Error>
                         Ok(response_error("This user is not an admin."))
                     }
                     
+                }
+            });
+
+            app.at("/user/delete")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let user_id = get_field(object, "user_id");
+                let mut guard = request.state().lock().unwrap();
+                let name = guard.users.get(&user_id);
+                if name.is_none()
+                {
+                    Ok(response_error("This user does not exist."))
+                }
+                else
+                {
+                    let iter1 = guard.user_groups.iter();
+                    let iter2 = guard.user_groups.iter();
+                    let collection = iter1.filter(|&x| x.0.user_id == user_id);
+                    let collect_copy = iter2.filter(|&x| x.0.user_id == user_id);
+                    let closed_collect = collection.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &true);
+                    let free_collect = collect_copy.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &false);
+                    let mut flag = false;
+                    let mut vec:Vec<u32> = Vec::new();
+                    let mut delete_vec = Vec::new();
+                    for x in free_collect
+                    {
+
+                        if x.1.access_level == Access::User || count_admins(x.0.group_id, &guard.user_groups) > 1
+                        {
+                            delete_vec.push(UserGroupId{user_id: x.0.user_id, group_id: x.0.group_id});
+                        }
+                        else 
+                        {
+                            flag=true;
+                            vec.push(x.0.group_id);
+                        }
+                    }
+                    if closed_collect.count() > 0
+                    {
+                        Ok(response_error("User have closed groups. So he was deleted from opened groups."))
+                    }
+                    else 
+                    {
+                        if flag == false
+                        {
+                            for x in delete_vec
+                            {
+                                guard.user_groups.remove(&x);
+                            }
+                            guard.users.remove(&user_id);
+                            Ok(response_empty())
+                        }
+                        else {
+                           let mut string: String="User cannot be delete from group".to_string();
+                           for x in vec
+                           {
+                                string+=format!("{0}, ", x).as_str();
+                           }
+                           string+="because he is the last admin in these groups.";
+                           let str = string.as_str();
+                           Ok(response_error(str))
+                        }
+                    }
                 }
             });
         app.listen("127.0.0.1:8080").await
