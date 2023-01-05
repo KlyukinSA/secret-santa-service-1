@@ -51,15 +51,6 @@ where
     object.get(key).unwrap().as_str().unwrap().parse().unwrap()
 }
 
-fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
-{
-    match map.keys().max()
-    {
-        Some(id) => id + 1,
-        None => 0,
-    }
-}
-
 fn response_data(value: Value) -> Response
 {
     Response::builder(200)
@@ -349,6 +340,35 @@ fn main() -> Result<(), std::io::Error>
                         response_empty()
                     }
                 })
+            });
+            app.at("/group/target_by_id/:user_id/:group_id")
+            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
+                let first_id = request.param("user_id")?;
+                let second_id = request.param("group_id")?;
+                for c in first_id.chars() {
+                    if !c.is_numeric() {
+                        return Ok(response_error("Wrong format user id"));
+                    } 
+                }
+                for c in second_id.chars() {
+                    if !c.is_numeric() {
+                        return Ok(response_error("Wrong format group id"));
+                    } 
+                }
+                let user_id: Id = first_id.parse().unwrap();
+                let group_id: Id = second_id.parse().unwrap();
+                let from_user = UserGroupId{
+                    user_id,
+                    group_id
+                };
+                let mut guard = request.state().lock().unwrap();
+                if(guard.user_groups.contains_key(&from_user)){
+                    let need_user  = guard.user_groups.get(&from_user).unwrap();
+                    let need_user_id = need_user.santa_id;
+                    return Ok(response_data(json!({"cysh_for_id": need_user_id})));
+                } else {
+                    return Ok(response_error("bad user or group id"));
+                }
             });
         app.listen("127.0.0.1:8080").await
     };
