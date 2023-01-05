@@ -307,7 +307,7 @@ fn main() -> Result<(), std::io::Error>
                         .body(tide::Body::from_json(&json!({"error": "bad group_id and/or user_id"}))?)
                         .build())
                 }
-                });
+            });
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
