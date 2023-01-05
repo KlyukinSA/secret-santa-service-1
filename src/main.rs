@@ -89,12 +89,12 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
 }
 
-fn does_user_belong_to_group(user_id: Id, group_id: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)-> bool
+fn does_user_belong_to_group(user_id: Id, group_id: Id, user_groups: &HashMap<UserGroupId,UserGroupProps>) -> bool
 {
     return user_groups.contains_key(&UserGroupId { user_id, group_id });
 }
 
-fn count_admins(group_id: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)->usize
+fn count_admins(group_id: Id, user_groups: &HashMap<UserGroupId, UserGroupProps>) ->usize
 {
     let iter = user_groups.into_iter();
     let collection = iter.filter(|&x| x.0.group_id == group_id && x.1.access_level == Access::Admin);
@@ -104,7 +104,7 @@ fn count_admins(group_id: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
-        let mut data = DataBase
+        let data = DataBase
         {
             users: HashMap::new(),
             groups: HashMap::new(),
@@ -135,10 +135,14 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-
                 let creator_id: Id = get_field(object, "creator_id");
+
                 let mut guard = request.state().lock().unwrap();
-                if guard.users.contains_key(&creator_id)
+                Ok(if !guard.users.contains_key(&creator_id)
+                {
+                    response_error("no such user")
+                }
+                else
                 {
                     let id = get_not_used_in_map_id(&guard.groups);
                     guard.groups.insert(id, false);
@@ -154,16 +158,8 @@ fn main() -> Result<(), std::io::Error>
                             santa_id: 0,
                         }
                     );
-                    Ok(Response::builder(200)
-                        .body(tide::Body::from_json(&json!({"group_id": id}))?)
-                        .build())
-                }
-                else
-                {
-                    Ok(Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
-                        .build())
-                }
+                    response_data(json!({"group_id": id}))
+                })
             });
         app.at("/group/join")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
@@ -205,42 +201,42 @@ fn main() -> Result<(), std::io::Error>
                     },
                 })
             });
-        
-            app.at("/group/unadmin")
+        app.at("/group/unadmin")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let admin_id = get_field(object, "admin_id");
                 let group_id = get_field(object, "group_id");
+
                 let mut guard = request.state().lock().unwrap();
-                if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("User does not belong to this group. Try again."))
+                    response_error("User does not belong to this group. Try again.")
                 }
                 else 
                 {
                     let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
                     let ugp = guard.user_groups.get(&ugid).unwrap();
-                    if ugp.access_level == Access::Admin
+                    if ugp.access_level != Access::Admin
+                    {
+                        response_error("This user is not an admin.")
+                    }
+                    else
                     {
                         if count_admins(group_id, &guard.user_groups) < 2
                         {
-                            Ok(response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group."))
+                            response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.")
                         }
                         else
                         {
                             let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
                             ugp1.access_level = Access::User;
-                            Ok(response_empty())
+                            response_empty()
                         }    
                     }
-                    else
-                    {
-                        Ok(response_error("This user is not an admin."))
-                    }
-                    
-                }
+                })
             });
+        
         app.listen("127.0.0.1:8080").await
     };
     
