@@ -93,37 +93,7 @@ fn main() -> Result<(), std::io::Error>
             groups: HashMap::new(),
             user_groups: HashMap::new(),
         };
-        
-        // Mock data (данные для тестирования)
-        data.users.insert(0, "Ilya".to_string());
-        data.users.insert(2, "Stepan".to_string());
-        data.groups.insert(0, false);
-        data.groups.insert(1, false);
-        data.user_groups.insert(
-            UserGroupId
-            {
-                user_id: 0,
-                group_id: 0,
-            },
-            UserGroupProps
-            {
-                access_level: Access::Admin,
-                santa_id: 0,
-            }
-        );
-        data.user_groups.insert(
-            UserGroupId
-            {
-                user_id: 2,
-                group_id: 1,
-            },
-            UserGroupProps
-            {
-                access_level: Access::Admin,
-                santa_id: 0,
-            }
-        );
-     
+    
         let state = Arc::new(Mutex::new(data));
         let mut app = tide::with_state(state);
 
@@ -138,6 +108,7 @@ fn main() -> Result<(), std::io::Error>
                 let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
+        
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
