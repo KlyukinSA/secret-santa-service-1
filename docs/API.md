@@ -148,16 +148,23 @@
 ```
 
 ## POST /group/unadmin
-- Делает пользователя с `admin_id` пользователем группы `group_id`, если `admin_id` это `id` администратора.
-```json
-// In
-{
-  "group_id":4,
-  "admin_id":3,
-}
+Делает пользователя с `admin_id` пользователем группы `group_id`, если `admin_id` это `id` администратора.
+- Принимает JSON объект с полями `admin_id` и `group_id`.
 
-// Out
-{}
+Назовем ошибкой http-ответ с кодом 400 и телом в виде JSON объекта с полем error равным строке, которую назовем сообщением ошибки.
+
++ Если нет чисел `admin_id` или `group_id`, не отвечает.
++ Если пользователя нет в группе, или группа указана не та, ошибка с сообщением: `"User does not belong to this group. Try again."`
++ Если пользователь принадлежит группе, но не является её администратором, ошибка с сообщением: `"This user is not an admin."`
++ Если указанный id принадлежит последнему администратору группы, ошибка с сообщением: `"It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group."`
++ Если ни один из этих пунктов не выполняется - `access_level` меняется до `user`. 
+
+Пример входных данных
+``` json
+{
+  "admin_id":"3",
+  "group_id":"4",
+}
 ```
 
 ## POST /group/quit
