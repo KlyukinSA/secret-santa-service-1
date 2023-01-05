@@ -33,6 +33,25 @@ struct DataBase
     user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
+fn response_data(value: Value) -> tide::Response
+{
+    tide::Response::builder(200)
+        .body(tide::Body::from_json(&value).unwrap())
+        .build()
+}
+
+fn response_empty() -> tide::Response
+{
+    tide::Response::builder(200).build()
+}
+
+fn response_error(msg: String) -> tide::Response
+{
+    tide::Response::builder(400)
+        .body(tide::Body::from_json(&json!({"error": msg})).unwrap())
+        .build()
+}
+
 fn get_field<T>(object: &serde_json::Map<String, Value>, key: &str) -> T
 where
     T: std::str::FromStr,
@@ -211,14 +230,12 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let admin_id = object.get("admin_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
-                let group_id = object.get("group_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
+                let admin_id = get_field(object, "admin_id");
+                let group_id = get_field(object, "group_id");
                 let mut guard = request.state().lock().unwrap();
                 if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
                 {
-                    Ok(tide::Response::builder(400)
-                          .body(tide::Body::from_json(&json!({"error": "user does not belong to this group"}))?)
-                          .build())
+                    Ok(response_error("user does not belong to this group".to_string()))
                 }
                 else 
                 {
@@ -228,24 +245,18 @@ fn main() -> Result<(), std::io::Error>
                     {
                         if count_admins(group_id, &guard.user_groups) < 2
                         {
-                            Ok(tide::Response::builder(400)
-                                .body(tide::Body::from_json(&json!({"error": "only one admin in this group"}))?)
-                                .build())
+                            Ok(response_error("only one admin in this group".to_string()))
                         }
                         else
                         {
                             let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
                             ugp1.access_level = Access::User;
-                            Ok(tide::Response::builder(200)
-                                .body(tide::Body::from_json(&json!({"admin->user": admin_id}))?)
-                                .build())
+                            Ok(response_empty())
                         }    
                     }
                     else
                     {
-                        Ok(tide::Response::builder(400)
-                            .body(tide::Body::from_json(&json!({"error": "not an admin"}))?)
-                            .build())
+                        Ok(response_error("not an admin".to_string()))
                     }
                     
                 }
