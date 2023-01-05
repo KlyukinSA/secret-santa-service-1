@@ -123,10 +123,14 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-
                 let creator_id: Id = get_field(object, "creator_id");
+
                 let mut guard = request.state().lock().unwrap();
-                if guard.users.contains_key(&creator_id)
+                Ok(if !guard.users.contains_key(&creator_id)
+                {
+                    response_error("no such user")
+                }
+                else
                 {
                     let id = get_not_used_in_map_id(&guard.groups);
                     guard.groups.insert(id, false);
@@ -142,16 +146,8 @@ fn main() -> Result<(), std::io::Error>
                             santa_id: 0,
                         }
                     );
-                    Ok(Response::builder(200)
-                        .body(tide::Body::from_json(&json!({"group_id": id}))?)
-                        .build())
-                }
-                else
-                {
-                    Ok(Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
-                        .build())
-                }
+                    response_data(json!({"group_id": id}))
+                })
             });
         app.at("/group/join")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
