@@ -42,7 +42,11 @@ where
 
 fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
-    *map.keys().max().unwrap() + 1
+    match map.keys().max()
+    {
+        Some(id) => id + 1,
+        None => 0,
+    }
 }
 
 fn response_data(value: Value) -> Response
