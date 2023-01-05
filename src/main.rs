@@ -219,7 +219,47 @@ fn main() -> Result<(), std::io::Error>
                     },
                 })
             });
-        
+        app.at("/group/make_admin")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id: Id = get_field(object, "group_id");
+                let member_id: Id = get_field(object, "member_id");
+                let admin_id: Id = get_field(object, "admin_id");
+
+                let mut guard = request.state().lock().unwrap();
+                if !guard.users.contains_key(&member_id)
+                || !guard.users.contains_key(&admin_id)
+                {
+                    Ok(response_error("no such user or admin"))
+                }
+                else if !guard.groups.contains_key(&group_id)
+                {
+                    Ok(response_error("no such group"))
+                }
+                else if !does_user_belong_to_group(member_id, group_id, &guard.user_groups)
+                {
+                    Ok(response_error("user isn't a member of the group"))
+                }
+                else if is_admin(member_id, group_id, &guard.user_groups)
+                {
+                    Ok(response_error("user is already an admin"))
+                }
+                else if !is_admin(admin_id, group_id, &guard.user_groups)
+                {
+                    Ok(response_error("admin_id isn't an actual admin's ID"))
+                }
+                else {
+                    guard.user_groups.insert(
+                        UserGroupId {
+                            user_id: member_id,
+                            group_id,
+                        },
+                        UserGroupProps::new(Access::Admin),
+                    );
+                    Ok(response_empty())
+                }
+            });
         app.listen("127.0.0.1:8080").await
     };
     
