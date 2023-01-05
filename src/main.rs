@@ -348,7 +348,7 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else
                         {
-                            response_data(json!({"error": "user_id is only one Admin in group_id"}))
+                            response_error("user_id is only one Admin in group_id")
                         }
                     }
                 }
