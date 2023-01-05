@@ -299,21 +299,21 @@ fn main() -> Result<(), std::io::Error>
                 let admin_id: Id = get_field(object, "admin_id");
 
                 let mut guard = request.state().lock().unwrap();
-                if !guard.groups.contains_key(&group_id)
+                Ok(if !guard.groups.contains_key(&group_id)
                 {
-                    Ok(response_error("no such group"))
+                    response_error("no such group")
                 }
                 else if !does_user_belong_to_group(member_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("user isn't a member of the group"))
+                    response_error("user isn't a member of the group")
                 }
                 else if is_admin(member_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("user is already an admin"))
+                    response_error("user is already an admin")
                 }
                 else if !is_admin(admin_id, group_id, &guard.user_groups)
                 {
-                    Ok(response_error("admin_id isn't an actual admin's ID"))
+                    response_error("admin_id isn't an actual admin's ID")
                 }
                 else {
                     guard.user_groups.insert(
@@ -323,9 +323,9 @@ fn main() -> Result<(), std::io::Error>
                         },
                         UserGroupProps::new(Access::Admin),
                     );
-                    Ok(response_empty())
+                    response_empty()
                 }
-            });
+            )});
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
