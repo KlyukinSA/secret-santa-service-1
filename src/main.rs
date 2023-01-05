@@ -173,7 +173,7 @@ fn main() -> Result<(), std::io::Error>
                 Ok(match guard.groups.get(&user_group_id.group_id)
                 {
                     None => response_error("no such group"),
-                    Some(is_closed) => 
+                    Some(is_closed) =>
                     {
                         if *is_closed
                         {
@@ -232,13 +232,42 @@ fn main() -> Result<(), std::io::Error>
                             let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
                             ugp1.access_level = Access::User;
                             response_empty()
-                        }    
+                        }
                     }
                 })
             });
-        
+        app.at("/group/delete")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let admin_id = get_field(object, "admin_id");
+                let group_id = get_field(object, "group_id");
+
+                let mut guard = request.state().lock().unwrap();
+                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                {
+                    response_error("User does not belong to this group. Try again.")
+                }
+                else
+                {
+                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
+                    let ugp = guard.user_groups.get(&ugid).unwrap();
+                    if ugp.access_level != Access::Admin
+                    {
+                        response_error("This user is not an admin.")
+                    }
+                    else
+                    {
+                        // Before delete group, we need to delete all users from this group
+                        guard.user_groups.retain(|user_group_id, _| {
+                            user_group_id.group_id != group_id
+                        });
+                        guard.groups.remove(&group_id);
+                        response_empty()
+                    }
+                }
+            )});
         app.listen("127.0.0.1:8080").await
     };
-    
     futures::executor::block_on(f)
 }
