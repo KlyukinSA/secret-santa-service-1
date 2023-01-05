@@ -333,33 +333,29 @@ fn main() -> Result<(), std::io::Error>
                 let group_id : Id = get_field(object, "group_id");
                 let user_id : Id = get_field(object, "user_id");
                 let guard = request.state().lock().unwrap();
-                if guard.user_groups.contains_key(&UserGroupId{ user_id: (user_id), group_id: (group_id) })
+                Ok(if guard.user_groups.contains_key(&UserGroupId{ user_id: (user_id), group_id: (group_id) })
                 {
                     let temp_user_group_id = guard.user_groups.get(&UserGroupId { user_id: (user_id), group_id: (group_id) });
                     if temp_user_group_id.unwrap().access_level == Access::User
                     {
-                        Ok(tide::Response::builder(200).build())
+                        response_empty()
                     }
                     else
                     {
                         if (count_admins(group_id, &guard.user_groups) > 1)
                         {
-                            Ok(tide::Response::builder(200).build())
+                            response_empty()
                         }
                         else
                         {
-                            Ok(tide::Response::builder(401)
-                                .body(tide::Body::from_json(&json!({"error": "user_id is only one Admin in group_id"}))?)
-                                .build())
+                            response_data(json!({"error": "user_id is only one Admin in group_id"}))
                         }
                     }
                 }
                 else
                 {
-                    Ok(tide::Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad group_id and/or user_id"}))?)
-                        .build())
-                }
+                    response_error("bad group_id and/or user_id")
+                })
             });
         app.listen("127.0.0.1:8080").await
     };
