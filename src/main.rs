@@ -44,6 +44,29 @@ fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
     *map.keys().max().unwrap() + 1
 }
+
+fn response_data(value: Value) -> tide::Response
+{
+    tide::Response::builder(200)
+        .body(tide::Body::from_json(&value).unwrap())
+        .build()
+}
+
+fn response_empty() -> tide::Response
+{
+    tide::Response::builder(200).build()
+}
+
+fn response_error(msg: String) -> tide::Response
+{
+    tide::Response::builder(400)
+        .body(tide::Body::from_json(&json!({"error": msg})).unwrap())
+        .build()
+}
+
+
+
+
 fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Result<Value, String>
 {
     let name: String = get_field(input_obj, "name");
@@ -121,12 +144,8 @@ fn main() -> Result<(), std::io::Error>
                 let object = body.as_object().unwrap();
                 Ok(match user_create(object, request.state())
                 {
-                    Ok(value) => tide::Response::builder(200)
-                        .body(tide::Body::from_json(&value)?)
-                        .build(),
-                    Err(msg) => tide::Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": msg}))?)
-                        .build(),
+                    Ok(value) => response_data(value),
+                    Err(msg) => response_error(msg),
                 })
             });
         app.at("/group/create")
