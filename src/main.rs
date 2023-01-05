@@ -33,6 +33,23 @@ struct DataBase
     user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
+fn get_field<T>(object: &serde_json::Map<String, Value>, key: &str) -> T
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Debug,
+{
+    object.get(key).unwrap().as_str().unwrap().parse().unwrap()
+}
+
+fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
+{
+    match map.keys().max()
+    {
+        Some(id) => id + 1,
+        None => 0,
+    }
+}
+
 fn response_data(value: Value) -> tide::Response
 {
     tide::Response::builder(200)
@@ -52,18 +69,8 @@ fn response_error(msg: String) -> tide::Response
         .build()
 }
 
-fn get_field<T>(object: &serde_json::Map<String, Value>, key: &str) -> T
-where
-    T: std::str::FromStr,
-    <T as std::str::FromStr>::Err: std::fmt::Debug,
-{
-    object.get(key).unwrap().as_str().unwrap().parse().unwrap()
-}
 
-fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
-{
-    *map.keys().max().unwrap() + 1
-}
+
 
 fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Response
 {
