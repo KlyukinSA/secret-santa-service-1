@@ -289,7 +289,7 @@ fn main() -> Result<(), std::io::Error>
                     }
                     else
                     {
-                        if true // TODO: waiting list_admins
+                        if (count_admins(group_id, &guard.user_groups) > 1)
                         {
                             Ok(tide::Response::builder(200).build())
                         }
