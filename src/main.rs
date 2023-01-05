@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::Request;
 use serde_json::{Value, json, Map};
 
+#[derive(PartialEq,Eq)]
 enum Access
 {
     User,
@@ -61,12 +62,12 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     }
 }
 
-fn does_user_belong_to_group(userId: &Id, groupId: &Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)-> bool
+fn does_user_belong_to_group(userId: Id, groupId: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)-> bool
 {
    let mut isHere = false;
    for cur_ug in user_groups
    {
-        if cur_ug.UserGroupId.group_id == groupId && cur_ug.UserGroupId.user_id == userId
+        if cur_ug.0.group_id == groupId && cur_ug.0.user_id == userId
         {
             isHere = true;
             break;
@@ -184,27 +185,30 @@ fn main() -> Result<(), std::io::Error>
                 let admin_id = object.get("admin_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
                 let group_id = object.get("group_id").unwrap().as_str().unwrap().parse::<u32>().unwrap();
                 let mut guard = request.state().lock().unwrap();
-                if !does_user_belong_to_group(&admin_id, &group_id, guard.user_groups)
+                if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
                 {
-                    Err(tide::Response::builder(400)
+                    Ok(tide::Response::builder(400)
                           .body(tide::Body::from_json(&json!({"error": "user does not belong to this group"}))?)
                           .build())
                 }
                 else 
                 {
-                    let ugid = new::UserGroupId { user_id: admin_id, group_id: group_id};
-                    let ugp = guard.user_groups.get(ugid);
-                    if ugp.UserGroupProps.access_level == Access::Admin
+                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
+                    let mut ugp = guard.user_groups.get_mut(&ugid).unwrap();
+                    if ugp.access_level == Access::Admin
                     {
-                        ugp.access_level= Access::User;
+                        ugp.access_level = Access::User;
+                        Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"admin->user": admin_id}))?)
+                        .build())
+
                     }
                     else
                     {
-                        Err(tide::Response::builder(400)
+                        Ok(tide::Response::builder(400)
                             .body(tide::Body::from_json(&json!({"error": "not an admin"}))?)
                             .build())
                     }
-
                 }
             });
         app.listen("127.0.0.1:8080").await
