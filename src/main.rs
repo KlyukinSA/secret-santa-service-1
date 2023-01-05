@@ -25,6 +25,14 @@ struct UserGroupProps
     access_level: Access,
     santa_id: Id,
 }
+impl UserGroupProps {
+    fn new(access_level: Access) -> UserGroupProps {
+        UserGroupProps {
+            access_level,
+            santa_id: 0,
+        }
+    }
+}
 
 struct DataBase
 {
@@ -48,6 +56,16 @@ fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
         Some(id) => id + 1,
         None => 0,
     }
+}
+
+fn is_admin(user: Id, group: Id, map: &HashMap<UserGroupId, UserGroupProps>) -> bool
+{
+    map.get(
+        &UserGroupId {
+            user_id: user,
+            group_id: group,
+        }
+    ).unwrap().access_level == Access::Admin
 }
 
 fn response_data(value: Value) -> Response
@@ -194,46 +212,45 @@ fn main() -> Result<(), std::io::Error>
                     },
                 })
             });
-        
         app.at("/group/make_admin")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let group_id = get_field(object, "group_id");
-                let member_id = get_field(object, "member_id");
-                let admin_id = get_field(object, "admin_id");
+                let group_id: Id = get_field(object, "group_id");
+                let member_id: Id = get_field(object, "member_id");
+                let admin_id: Id = get_field(object, "admin_id");
 
                 let mut guard = request.state().lock().unwrap();
-                if guard.user_groups.get(
-                    &UserGroupId {
-                        user_id: member_id,
-                        group_id,
-                    }
-                ).unwrap().access_level != Access::Admin
-                && guard.user_groups.get(
-                    &UserGroupId {
-                        user_id: admin_id,
-                        group_id,
-                    }
-                ).unwrap().access_level == Access::Admin {
+                if !guard.users.contains_key(&member_id)
+                || !guard.users.contains_key(&admin_id)
+                {
+                    Ok(response_error("no such user or admin"))
+                }
+                else if !guard.groups.contains_key(&group_id)
+                {
+                    Ok(response_error("no such group"))
+                }
+                else if !guard.user_groups.contains_key(&UserGroupId{user_id: member_id, group_id})
+                {
+                    Ok(response_error("user isn't a member of the group"))
+                }
+                else if is_admin(member_id, group_id, &guard.user_groups)
+                {
+                    Ok(response_error("user is already an admin"))
+                }
+                else if !is_admin(admin_id, group_id, &guard.user_groups)
+                {
+                    Ok(response_error("admin_id isn't an actual admin's ID"))
+                }
+                else {
                     guard.user_groups.insert(
                         UserGroupId {
                             user_id: member_id,
                             group_id,
                         },
-                        UserGroupProps {
-                            access_level: Access::Admin,
-                            santa_id: 0,
-                        }
+                        UserGroupProps::new(Access::Admin),
                     );
-                    Ok(tide::Response::builder(200)
-                        .body(tide::Body::from_json(&json!({guard.users.get(&member_id).unwrap(): "is admin now"}))?)
-                        .build())
-                }
-                else {
-                    Ok(tide::Response::builder(400)
-                        .body(tide::Body::from_json(&json!({"error": "bad id or group"}))?)
-                        .build())
+                    Ok(response_empty())
                 }
             });
         app.listen("127.0.0.1:8080").await
