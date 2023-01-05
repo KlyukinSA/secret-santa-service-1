@@ -299,12 +299,7 @@ fn main() -> Result<(), std::io::Error>
                 let admin_id: Id = get_field(object, "admin_id");
 
                 let mut guard = request.state().lock().unwrap();
-                if !guard.users.contains_key(&member_id)
-                || !guard.users.contains_key(&admin_id)
-                {
-                    Ok(response_error("no such user or admin"))
-                }
-                else if !guard.groups.contains_key(&group_id)
+                if !guard.groups.contains_key(&group_id)
                 {
                     Ok(response_error("no such group"))
                 }
