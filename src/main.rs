@@ -29,7 +29,9 @@ struct UserGroupProps
 struct DataBase
 {
     users: HashMap<Id, String>,
+    users_max_id: Id,
     groups: HashMap<Id, bool>,
+    groups_max_id: Id,
     user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
@@ -78,8 +80,9 @@ fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> 
     if name.len() > 0
     {
         let mut guard = state.lock().unwrap();
-        let id = get_not_used_in_map_id(&guard.users);
+        let id = guard.users_max_id;
         guard.users.insert(id, name);
+        guard.users_max_id += 1;
 
         response_data(json!({"id": id}))
     }
@@ -107,7 +110,9 @@ fn main() -> Result<(), std::io::Error>
         let data = DataBase
         {
             users: HashMap::new(),
+            users_max_id: 0,
             groups: HashMap::new(),
+            groups_max_id: 0,
             user_groups: HashMap::new(),
         };
         let state = Arc::new(Mutex::new(data));
@@ -144,8 +149,9 @@ fn main() -> Result<(), std::io::Error>
                 }
                 else
                 {
-                    let id = get_not_used_in_map_id(&guard.groups);
+                    let id = guard.groups_max_id;
                     guard.groups.insert(id, false);
+                    guard.groups_max_id += 1;
                     guard.user_groups.insert(
                         UserGroupId
                         {
