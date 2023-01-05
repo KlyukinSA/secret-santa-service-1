@@ -110,7 +110,6 @@ fn main() -> Result<(), std::io::Error>
             groups: HashMap::new(),
             user_groups: HashMap::new(),
         };
-        
         let state = Arc::new(Mutex::new(data));
         let mut app = tide::with_state(state);
 
