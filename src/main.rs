@@ -76,6 +76,22 @@ fn does_user_belong_to_group(userId: Id, groupId: Id, user_groups : &HashMap<Use
     return isHere;
 }
 
+fn count_admins(groupId: Id, user_groups : &HashMap<UserGroupId,UserGroupProps>)->u32
+{
+    let mut count=0;
+    for cur_ug in user_groups
+   {
+        if cur_ug.0.group_id == groupId
+        {
+            if cur_ug.1.access_level == Access::Admin
+            {
+                count+=1;
+            }
+        }
+    }
+    return count;
+}
+
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
@@ -189,6 +205,12 @@ fn main() -> Result<(), std::io::Error>
                 {
                     Ok(tide::Response::builder(400)
                           .body(tide::Body::from_json(&json!({"error": "user does not belong to this group"}))?)
+                          .build())
+                }
+                else if count_admins(group_id, &guard.user_groups) < 2
+                {
+                    Ok(tide::Response::builder(400)
+                          .body(tide::Body::from_json(&json!({"error": "only one admin in this group"}))?)
                           .build())
                 }
                 else 
