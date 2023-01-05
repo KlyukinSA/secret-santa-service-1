@@ -326,6 +326,30 @@ fn main() -> Result<(), std::io::Error>
                     response_empty()
                 }
             )});
+        app.at("/group/quit")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id : Id = get_field(object, "group_id");
+                let user_id : Id = get_field(object, "user_id");
+                let guard = request.state().lock().unwrap();
+                Ok(if !guard.user_groups.contains_key(&UserGroupId{ user_id: (user_id), group_id: (group_id) })
+                {
+                    response_error("bad group_id and/or user_id")
+                }
+                else
+                {
+                    let temp_user_group_id = guard.user_groups.get(&UserGroupId { user_id: (user_id), group_id: (group_id) });
+                    if (temp_user_group_id.unwrap().access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2)
+                    {
+                        response_error("user_id is only one Admin in group_id")
+                    }
+                    else
+                    {   
+                        response_empty()
+                    }
+                })
+            });
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
