@@ -23,7 +23,7 @@
 ## POST /user/create - создать пользователя
 - Принимает JSON объект с полем `name` равным требуемому имени нового пользователя. Возвращает JSON объект с полем `id` равным ID нового пользователя в случае успеха, код возврата `200`.
 - Если имя - пустая строка, возвращает JSON объект с полем `error` равным сообщению об ошибке, код возврата `400`.
-- Если входные данные неверного формата (`{"nae":"Danis"}`), то сервер паникует, а клиент не получает ответ на свой запрос.
+- Если входные данные неверного формата (`{"name":"Danis"}`), то сервер паникует, а клиент не получает ответ на свой запрос.
 
 Пример правильного обмена данными:
 ```json
@@ -101,8 +101,8 @@
 ```
 
 ## DELETE /group/delete
-- Удаляет группу по `id_group` и `admin_id`. Если пользователь с `admin_id` не является администратором этой группы, выдать ошибку. 
-- Не забудьте удалить принадлежность участников к этой группе.
+- Удаляет группу по `group_id` и `admin_id`. Если пользователь с `admin_id` не является администратором этой группы, выдает код `403` с сообщением `{"error":"Forbidden"}`.
+- Также удаляет из группы всех участников.
 ```json
 // In
 {
@@ -113,6 +113,25 @@
 // Out
 {}
 ```
+
+Пример:
+```bash
+cysh-babai@fenrir:~
+$ curl --header "Content-Type: application/json" --request GET --data '{"name":"Danis"}' http://127.0.0.1:8080/groups
+{"0":false,"1":false}
+
+cysh-babai@fenrir:~
+$ curl --header "Content-Type: application/json" --request POST --data '{"group_id":"1", "admin_id":"3"}' http://127.0.0.1:8080/group/delete 
+{"error":"Forbidden"}
+
+cysh-babai@fenrir:~
+$ curl --header "Content-Type: application/json" --request POST --data '{"group_id":"1", "admin_id":"2"}' http://127.0.0.1:8080/group/delete 
+
+cysh-babai@fenrir:~
+$ curl --header "Content-Type: application/json" --request GET --data '{"group_id":"1", "admin_id":"2"}' http://127.0.0.1:8080/groups
+{"0":false}
+```
+
 
 ## POST /group/join
 - Добавляет пользователя с `user_id` в группу `group_id` с `access_level User`.

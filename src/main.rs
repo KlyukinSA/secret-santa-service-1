@@ -163,8 +163,71 @@ fn main() -> Result<(), std::io::Error>
                         .build())
                 }
             });
+        app.at("/group/delete")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+
+                let group_id: Id = get_field(object, "group_id");
+                let admin_id: Id = get_field(object, "admin_id");
+
+                let mut guard = request.state().lock().unwrap();
+
+                if guard.groups.contains_key(&group_id)
+                {
+                    // Check if admin_id specified is admin of this group
+                    let user_group = guard.user_groups.get(
+                        &UserGroupId
+                        {
+                            user_id: admin_id,
+                            group_id: group_id,
+                        }
+                    );
+                    if user_group.is_none()
+                    {
+                        return Ok(tide::Response::builder(403)
+                            .body(tide::Body::from_json(&json!({"error": "Forbidden"}))?)
+                            .build());
+                    }
+                    // If access level is not admin, return error
+                    if !matches!(user_group.unwrap().access_level, Access::Admin)
+                    {
+                        return Ok(tide::Response::builder(403)
+                            .body(tide::Body::from_json(&json!({"error": "Forbidden"}))?)
+                            .build());
+                    }
+
+                    // Before delete group, we need to delete all users from this group
+                    let mut users_to_delete = Vec::new();
+                    for (user_group_id, _) in guard.user_groups.iter()
+                    {
+                        if user_group_id.group_id == group_id
+                        {
+                            users_to_delete.push(user_group_id.user_id);
+                        }
+                    }
+                    for user_id in users_to_delete
+                    {
+                        guard.user_groups.remove(
+                            &UserGroupId
+                            {
+                                user_id: user_id,
+                                group_id: group_id,
+                            }
+                        );
+                    }
+
+                    guard.groups.remove(&group_id);
+                    Ok(tide::Response::builder(200).build())
+                }
+                else
+                {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad group_id"}))?)
+                        .build())
+                }
+            });
         app.listen("127.0.0.1:8080").await
     };
-    
     futures::executor::block_on(f)
 }
