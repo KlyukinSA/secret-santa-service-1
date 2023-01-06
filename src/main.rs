@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::{Request, Response};
 use serde_json::{Value, json, Map};
 
-#[derive(PartialEq,Eq)]
+#[derive(PartialEq,Eq, Clone)]
 enum Access
 {
     User,
@@ -14,12 +14,13 @@ enum Access
 
 type Id = u32;
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Clone, serde::Serialize)]
 struct UserGroupId
 {
     user_id: Id,
     group_id: Id,
 }
+#[derive(Clone)]
 struct UserGroupProps
 {
     access_level: Access,
@@ -49,15 +50,6 @@ where
     <T as std::str::FromStr>::Err: std::fmt::Debug,
 {
     object.get(key).unwrap().as_str().unwrap().parse().unwrap()
-}
-
-fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
-{
-    match map.keys().max()
-    {
-        Some(id) => id + 1,
-        None => 0,
-    }
 }
 
 fn response_data(value: Value) -> Response
@@ -191,11 +183,7 @@ fn main() -> Result<(), std::io::Error>
                             user_id: creator_id,
                             group_id: id,
                         },
-                        UserGroupProps
-                        {
-                            access_level: Access::Admin,
-                            santa_id: 0,
-                        }
+                        UserGroupProps::new(Access::Admin)
                     );
                     response_data(json!({"group_id": id}))
                 })
@@ -204,12 +192,11 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let value: Value = request.body_json().await.unwrap();
                 let object = value.as_object().unwrap();
-                let mut user_group_id = UserGroupId{user_id: 0, group_id: 0};
-                user_group_id.user_id = get_field(object, "user_id");
-                user_group_id.group_id = get_field(object, "group_id");
+                let user_id = get_field(object, "user_id");
+                let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(match guard.groups.get(&user_group_id.group_id)
+                Ok(match guard.groups.get(&group_id)
                 {
                     None => response_error("no such group"),
                     Some(is_closed) =>
@@ -220,19 +207,20 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else
                         {
-                            if !guard.users.contains_key(&user_group_id.user_id)
+                            if !guard.users.contains_key(&user_id)
                             {
                                 response_error("no such user")
                             }
                             else
                             {
+                                let user_group_id = UserGroupId{user_id, group_id};
                                 if guard.user_groups.contains_key(&user_group_id)
                                 {
                                     response_error("user already in group")
                                 }
                                 else
                                 {
-                                    guard.user_groups.insert(user_group_id, UserGroupProps{access_level: Access::User, santa_id: 0});
+                                    guard.user_groups.insert(user_group_id, UserGroupProps::new(Access::User));
                                     response_empty()
                                 }
                             }
@@ -248,29 +236,27 @@ fn main() -> Result<(), std::io::Error>
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                let user_group_id = UserGroupId{user_id: admin_id, group_id};
+                Ok(match guard.user_groups.get(&user_group_id)
                 {
-                    response_error("User does not belong to this group. Try again.")
-                }
-                else 
-                {
-                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
-                    let ugp = guard.user_groups.get(&ugid).unwrap();
-                    if ugp.access_level != Access::Admin
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
                     {
-                        response_error("This user is not an admin.")
-                    }
-                    else
-                    {
-                        if count_admins(group_id, &guard.user_groups) < 2
+                        if user_group_props.access_level != Access::Admin
                         {
-                            response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.")
+                            response_error("This user is not an admin.")
                         }
                         else
                         {
-                            let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
-                            ugp1.access_level = Access::User;
-                            response_empty()
+                            if count_admins(group_id, &guard.user_groups) < 2
+                            {
+                                response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.")
+                            }
+                            else
+                            {
+                                guard.user_groups.get_mut(&user_group_id).unwrap().access_level = Access::User;
+                                response_empty()
+                            }
                         }
                     }
                 })
@@ -283,26 +269,25 @@ fn main() -> Result<(), std::io::Error>
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
                 {
-                    response_error("User does not belong to this group. Try again.")
-                }
-                else
-                {
-                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
-                    let ugp = guard.user_groups.get(&ugid).unwrap();
-                    if ugp.access_level != Access::Admin
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
                     {
-                        response_error("This user is not an admin.")
-                    }
-                    else
-                    {
-                        // Before delete group, we need to delete all users from this group
-                        guard.user_groups.retain(|user_group_id, _| {
-                            user_group_id.group_id != group_id
-                        });
-                        guard.groups.remove(&group_id);
-                        response_empty()
+                        if user_group_props.access_level != Access::Admin
+                        {
+                            response_error("This user is not an admin.")
+                        }
+                        else
+                        {
+                            // Before delete group, we need to delete all users from this group
+                            guard.user_groups.retain(|user_group_id, _|
+                                {
+                                    user_group_id.group_id != group_id
+                                });
+                            guard.groups.remove(&group_id);
+                            response_empty()
+                        }
                     }
                 }
             )});
@@ -342,6 +327,220 @@ fn main() -> Result<(), std::io::Error>
                     response_empty()
                 }
             )});
+        app.at("/group/quit")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id: Id = get_field(object, "group_id");
+                let user_id: Id = get_field(object, "user_id");
+
+                let mut guard = request.state().lock().unwrap();
+                let user_group_id = UserGroupId{user_id, group_id};
+                Ok(match guard.user_groups.get(&user_group_id)
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        if user_group_props.access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2
+                        {
+                            response_error("user is only one Admin in this group")
+                        }
+                        else
+                        {
+                            if *guard.groups.get(&group_id).unwrap()
+                            {
+                                response_error("group is closed")
+                            }
+                            else
+                            {
+                                guard.user_groups.remove(&user_group_id);
+                                response_empty()
+                            }
+                        }
+                    }
+                })
+            });
+        app.at("/group/target_by_id/:user_id/:group_id")
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move{
+                let first_id = request.param("user_id")?;
+                let second_id = request.param("group_id")?;
+                for c in first_id.chars() {
+                    if !c.is_numeric() {
+                        return Ok(response_error("Wrong format user id"));
+                    } 
+                }
+                for c in second_id.chars() {
+                    if !c.is_numeric() {
+                        return Ok(response_error("Wrong format group id"));
+                    } 
+                }
+                let user_id: Id = first_id.parse().unwrap(); // TODO
+                let group_id: Id = second_id.parse().unwrap();
+
+                let guard = request.state().lock().unwrap();
+                Ok(match guard.user_groups.get(&UserGroupId{user_id, group_id})
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        response_data(json!({"cysh_for_id": user_group_props.santa_id}))
+                    }
+                })
+            });
+        app.at("/group/secret_santa")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id: Id = get_field(object, "group_id");
+                let admin_id: Id = get_field(object, "admin_id");
+
+                let mut guard = request.state().lock().unwrap();
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        if user_group_props.access_level != Access::Admin
+                        {
+                            response_error("its not admin")
+                        }
+                        else
+                        {
+                            *guard.groups.get_mut(&(group_id)).unwrap() = true;
+                            let mut count = 0;
+                            //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
+                            //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
+                            //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
+                            //Например: из нужной группы пользователи с id 0, 1, 2, 4, 5. Тайный кыш бабай распределится таким образом
+                            //0-1
+                            //1-2
+                            //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
+                            //4-5
+                            //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
+                            for key in guard.user_groups.clone().keys()
+                            {
+                                if key.group_id == group_id
+                                {
+                                    count += 1;
+                                    let mut santa_id = key.user_id + 1;
+                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id})
+                                    {
+                                        santa_id -= count;
+                                        count = 0;
+                                    }
+                                    guard.user_groups.get_mut(&key).unwrap().santa_id = santa_id;
+                                }
+                            }
+                            response_empty()
+                        }
+                    }
+                })
+            });
+            app.at("/user/update")
+            .put(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let id : Id = get_field(object, "id");
+                let name: String = get_field(object, "name");
+                let mut guard = request.state().lock().unwrap();
+                if !guard.users.contains_key(&id)
+                {
+                    return Ok(response_error("No such id"));
+                }
+                else
+                {
+                    guard.users.entry(id).and_modify(|k| *k = name);
+                    return Ok(response_empty());
+                }
+            });
+
+
+            app.at("/user/delete")
+            .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let user_id = get_field(object, "user_id");
+                let mut guard = request.state().lock().unwrap();
+                Ok(match guard.users.get(&user_id)
+                {
+                    None => response_error("This user does not exist."),
+                    Some(_name) =>
+                    {
+                        if guard.user_groups.len() > 0
+                        {
+                            let iter1 = guard.user_groups.iter();
+                            let iter2 = guard.user_groups.iter();
+                            let collection = iter1.filter(|&x| x.0.user_id == user_id);
+                            let collect_copy = iter2.filter(|&x| x.0.user_id == user_id);
+                            let closed_collect = collection.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &true);
+                            let free_collect = collect_copy.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &false);
+                            let mut admin_flag = false;
+                            let mut vec:Vec<Id> = Vec::new();
+                            let mut delete_vec=Vec::new();
+                            for x in free_collect
+                            {
+                                if x.1.access_level == Access::Admin && count_admins(x.0.group_id, &guard.user_groups) == 1
+                                {
+                                    admin_flag=true;
+                                    vec.push(x.0.group_id);
+                                }
+                                else 
+                                {
+                                    delete_vec.push(UserGroupId{user_id: user_id, group_id: x.0.group_id});
+                                }
+                            }   
+                            if closed_collect.count() > 0
+                            {
+                                for x in delete_vec
+                                {
+                                    guard.user_groups.remove(&x);
+                                }
+                                if admin_flag == true
+                                {
+                                    let mut string: String="User has closed groups. So he was deleted from opened groups, if he wasn't last admin. User cannot be delete from groups: ".to_string();
+                                    for x in vec
+                                    {
+                                            string+=format!("{0}, ", x).as_str();
+                                    }
+                                    string+="because of last admin.";
+                                    response_error(string.as_str())
+                                }
+                                else
+                                {
+                                    response_error("User has closed groups. So he was deleted from opened groups.")
+                                }
+                            }
+                            else 
+                            {
+                                for x in delete_vec
+                                {
+                                    guard.user_groups.remove(&x);
+                                }
+                                if admin_flag == false
+                                {
+                                    guard.users.remove(&user_id);
+                                    response_empty()
+                                }
+                                else 
+                                {
+                                    let mut string: String="User cannot be delete from groups: ".to_string();
+                                    for x in vec
+                                    {
+                                        string+=format!("{0}, ", x).as_str();
+                                    }
+                                    string+="because he is the last admin in these groups.";
+                                    response_error(string.as_str())
+                                }
+                            }
+                        }
+                        else
+                        {
+                            guard.users.remove(&user_id);
+                            response_empty()
+                        }
+                    }
+                })
+            });
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
