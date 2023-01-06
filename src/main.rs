@@ -275,13 +275,12 @@ fn main() -> Result<(), std::io::Error>
             )});
 
             app.at("/user/delete")
-            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+            .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let user_id = get_field(object, "user_id");
                 let mut guard = request.state().lock().unwrap();
-                let name = guard.users.get(&user_id);
-                if name.is_none()
+                if guard.users.get(&user_id).is_none()
                 {
                     Ok(response_error("This user does not exist."))
                 }
@@ -293,8 +292,8 @@ fn main() -> Result<(), std::io::Error>
                     let collect_copy = iter2.filter(|&x| x.0.user_id == user_id);
                     let closed_collect = collection.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &true);
                     let free_collect = collect_copy.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &false);
-                    let mut flag = false;
-                    let mut vec:Vec<u32> = Vec::new();
+                    let mut admin_flag = false;
+                    let mut vec:Vec<Id> = Vec::new();
                     let mut delete_vec = Vec::new();
                     for x in free_collect
                     {
@@ -305,27 +304,46 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else 
                         {
-                            flag=true;
+                            admin_flag=true;
                             vec.push(x.0.group_id);
                         }
                     }
                     if closed_collect.count() > 0
                     {
-                        Ok(response_error("User have closed groups. So he was deleted from opened groups."))
+                        for x in delete_vec
+                        {
+                            guard.user_groups.remove(&x);
+                        }
+                        if admin_flag == true
+                        {
+
+                           let mut string: String="User has closed groups. So he was deleted from opened groups, if he wasn't last admin. User cannot be delete from groups: ".to_string();
+                           for x in vec
+                           {
+                                string+=format!("{0}, ", x).as_str();
+                           }
+                           string+="because of last admin.";
+                            Ok(response_error(string.as_str()))
+                        }
+                        else
+                        {
+                            Ok(response_error("User has closed groups. So he was deleted from opened groups."))
+                        }
                     }
                     else 
                     {
-                        if flag == false
+                        for x in delete_vec
                         {
-                            for x in delete_vec
-                            {
-                                guard.user_groups.remove(&x);
-                            }
+                            guard.user_groups.remove(&x);
+                        }
+                        if admin_flag == false
+                        {
                             guard.users.remove(&user_id);
                             Ok(response_empty())
                         }
-                        else {
-                           let mut string: String="User cannot be delete from group".to_string();
+                        else 
+                        {
+                           let mut string: String="User cannot be delete from groups: ".to_string();
                            for x in vec
                            {
                                 string+=format!("{0}, ", x).as_str();
@@ -337,7 +355,6 @@ fn main() -> Result<(), std::io::Error>
                     }
                 }
             });
-        
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
