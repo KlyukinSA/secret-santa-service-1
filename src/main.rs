@@ -146,7 +146,23 @@ fn main() -> Result<(), std::io::Error>
                 let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
-        
+        app.at("/group/list_admins")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let group_id: Id = get_field(object, "group_id");
+
+                let guard = request.state().lock().unwrap();
+                let admins: HashMap<&Id, &String> = guard.users.iter()
+                    .filter(|&x| guard.user_groups.contains_key(
+                        &UserGroupId {
+                            user_id: *x.0,
+                            group_id,
+                        }
+                    ) && is_admin(*x.0, group_id, &guard.user_groups))
+                    .collect();
+                Ok(json!(admins))
+            });
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
