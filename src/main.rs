@@ -167,11 +167,7 @@ fn main() -> Result<(), std::io::Error>
                             user_id: creator_id,
                             group_id: id,
                         },
-                        UserGroupProps
-                        {
-                            access_level: Access::Admin,
-                            santa_id: 0,
-                        }
+                        UserGroupProps::new(Access::Admin)
                     );
                     response_data(json!({"group_id": id}))
                 })
@@ -180,12 +176,11 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let value: Value = request.body_json().await.unwrap();
                 let object = value.as_object().unwrap();
-                let mut user_group_id = UserGroupId{user_id: 0, group_id: 0};
-                user_group_id.user_id = get_field(object, "user_id");
-                user_group_id.group_id = get_field(object, "group_id");
+                let user_id = get_field(object, "user_id");
+                let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(match guard.groups.get(&user_group_id.group_id)
+                Ok(match guard.groups.get(&group_id)
                 {
                     None => response_error("no such group"),
                     Some(is_closed) =>
@@ -196,19 +191,20 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else
                         {
-                            if !guard.users.contains_key(&user_group_id.user_id)
+                            if !guard.users.contains_key(&user_id)
                             {
                                 response_error("no such user")
                             }
                             else
                             {
+                                let user_group_id = UserGroupId{user_id, group_id};
                                 if guard.user_groups.contains_key(&user_group_id)
                                 {
                                     response_error("user already in group")
                                 }
                                 else
                                 {
-                                    guard.user_groups.insert(user_group_id, UserGroupProps{access_level: Access::User, santa_id: 0});
+                                    guard.user_groups.insert(user_group_id, UserGroupProps::new(Access::User));
                                     response_empty()
                                 }
                             }
@@ -269,9 +265,10 @@ fn main() -> Result<(), std::io::Error>
                         else
                         {
                             // Before delete group, we need to delete all users from this group
-                            guard.user_groups.retain(|user_group_id, _| {
-                                user_group_id.group_id != group_id
-                            });
+                            guard.user_groups.retain(|user_group_id, _|
+                                {
+                                    user_group_id.group_id != group_id
+                                });
                             guard.groups.remove(&group_id);
                             response_empty()
                         }
@@ -321,8 +318,9 @@ fn main() -> Result<(), std::io::Error>
                 let group_id: Id = get_field(object, "group_id");
                 let user_id: Id = get_field(object, "user_id");
 
-                let guard = request.state().lock().unwrap();
-                Ok(match guard.user_groups.get(&UserGroupId{user_id, group_id})
+                let mut guard = request.state().lock().unwrap();
+                let user_group_id = UserGroupId{user_id, group_id};
+                Ok(match guard.user_groups.get(&user_group_id)
                 {
                     None => response_error("user does not belong to this group"),
                     Some(user_group_props) =>
@@ -333,8 +331,15 @@ fn main() -> Result<(), std::io::Error>
                         }
                         else
                         {
-                            // FU
-                            response_empty()
+                            if *guard.groups.get(&group_id).unwrap()
+                            {
+                                response_error("group is closed")
+                            }
+                            else
+                            {
+                                guard.user_groups.remove(&user_group_id);
+                                response_empty()
+                            }
                         }
                     }
                 })
@@ -366,26 +371,27 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
-
         app.at("/group/secret_santa")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let group_id: Id = get_field(object, "group_id");
                 let admin_id: Id = get_field(object, "admin_id");
+
                 let mut guard = request.state().lock().unwrap();
-                let admin: &UserGroupProps;
-
-                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id: group_id}){
-                    None => response_error("no such user"),
-                    Some(res) => {
-                        admin = res;
-                        if admin.access_level == Access::Admin{
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        if user_group_props.access_level != Access::Admin
+                        {
+                            response_error("its not admin")
+                        }
+                        else
+                        {
                             *guard.groups.get_mut(&(group_id)).unwrap() = true;
-
-
                             let mut count = 0;
-
                             //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
                             //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
                             //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
@@ -395,27 +401,21 @@ fn main() -> Result<(), std::io::Error>
                             //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
                             //4-5
                             //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-
-
-                            for (key, mut val) in guard.user_groups.clone() {
-                                if key.group_id == group_id {
+                            for key in guard.user_groups.clone().keys()
+                            {
+                                if key.group_id == group_id
+                                {
                                     count += 1;
                                     let mut santa_id = key.user_id + 1;
-                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id: group_id})
+                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id})
                                     {
                                         santa_id -= count;
                                         count = 0;
                                     }
-                                    val.santa_id = santa_id;
-
-                                    *guard.user_groups.get_mut(&key).unwrap() = val;
+                                    guard.user_groups.get_mut(&key).unwrap().santa_id = santa_id;
                                 }
                             }
                             response_empty()
-
-                        }
-                        else {
-                            response_error("something went wrong")
                         }
                     }
                 })
