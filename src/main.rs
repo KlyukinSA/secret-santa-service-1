@@ -223,29 +223,27 @@ fn main() -> Result<(), std::io::Error>
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                let user_group_id = UserGroupId{user_id: admin_id, group_id};
+                Ok(match guard.user_groups.get(&user_group_id)
                 {
-                    response_error("User does not belong to this group. Try again.")
-                }
-                else 
-                {
-                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
-                    let ugp = guard.user_groups.get(&ugid).unwrap();
-                    if ugp.access_level != Access::Admin
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
                     {
-                        response_error("This user is not an admin.")
-                    }
-                    else
-                    {
-                        if count_admins(group_id, &guard.user_groups) < 2
+                        if user_group_props.access_level != Access::Admin
                         {
-                            response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.")
+                            response_error("This user is not an admin.")
                         }
                         else
                         {
-                            let mut ugp1 = guard.user_groups.get_mut(&ugid).unwrap();
-                            ugp1.access_level = Access::User;
-                            response_empty()
+                            if count_admins(group_id, &guard.user_groups) < 2
+                            {
+                                response_error("It is impossible to remove the last admin in a group. You can appoint a new admin and repeat or delete the whole group.")
+                            }
+                            else
+                            {
+                                guard.user_groups.get_mut(&user_group_id).unwrap().access_level = Access::User;
+                                response_empty()
+                            }
                         }
                     }
                 })
@@ -258,26 +256,24 @@ fn main() -> Result<(), std::io::Error>
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(if !does_user_belong_to_group(admin_id, group_id, &guard.user_groups)
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
                 {
-                    response_error("User does not belong to this group. Try again.")
-                }
-                else
-                {
-                    let ugid = UserGroupId { user_id: admin_id, group_id: group_id};
-                    let ugp = guard.user_groups.get(&ugid).unwrap();
-                    if ugp.access_level != Access::Admin
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
                     {
-                        response_error("This user is not an admin.")
-                    }
-                    else
-                    {
-                        // Before delete group, we need to delete all users from this group
-                        guard.user_groups.retain(|user_group_id, _| {
-                            user_group_id.group_id != group_id
-                        });
-                        guard.groups.remove(&group_id);
-                        response_empty()
+                        if user_group_props.access_level != Access::Admin
+                        {
+                            response_error("This user is not an admin.")
+                        }
+                        else
+                        {
+                            // Before delete group, we need to delete all users from this group
+                            guard.user_groups.retain(|user_group_id, _| {
+                                user_group_id.group_id != group_id
+                            });
+                            guard.groups.remove(&group_id);
+                            response_empty()
+                        }
                     }
                 }
             )});
@@ -321,23 +317,24 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let group_id : Id = get_field(object, "group_id");
-                let user_id : Id = get_field(object, "user_id");
+                let group_id: Id = get_field(object, "group_id");
+                let user_id: Id = get_field(object, "user_id");
+
                 let guard = request.state().lock().unwrap();
-                Ok(if !guard.user_groups.contains_key(&UserGroupId{ user_id: (user_id), group_id: (group_id) })
+                Ok(match guard.user_groups.get(&UserGroupId{user_id, group_id})
                 {
-                    response_error("bad group_id and/or user_id")
-                }
-                else
-                {
-                    let temp_user_group_id = guard.user_groups.get(&UserGroupId { user_id: (user_id), group_id: (group_id) });
-                    if temp_user_group_id.unwrap().access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
                     {
-                        response_error("user_id is only one Admin in group_id")
-                    }
-                    else
-                    {   
-                        response_empty()
+                        if user_group_props.access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2
+                        {
+                            response_error("user is only one Admin in this group")
+                        }
+                        else
+                        {
+                            // FU
+                            response_empty()
+                        }
                     }
                 })
             });
@@ -355,21 +352,18 @@ fn main() -> Result<(), std::io::Error>
                         return Ok(response_error("Wrong format group id"));
                     } 
                 }
-                let user_id: Id = first_id.parse().unwrap();
+                let user_id: Id = first_id.parse().unwrap(); // TODO
                 let group_id: Id = second_id.parse().unwrap();
-                let from_user = UserGroupId{
-                    user_id,
-                    group_id
-                };
 
                 let guard = request.state().lock().unwrap();
-                if guard.user_groups.contains_key(&from_user){
-                    let need_user  = guard.user_groups.get(&from_user).unwrap();
-                    let need_user_id = need_user.santa_id;
-                    return Ok(response_data(json!({"cysh_for_id": need_user_id})));
-                } else {
-                    return Ok(response_error("bad user or group id"));
-                }
+                Ok(match guard.user_groups.get(&UserGroupId{user_id, group_id})
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        response_data(json!({"cysh_for_id": user_group_props.santa_id}))
+                    }
+                })
             });
         
         app.listen("127.0.0.1:8080").await
