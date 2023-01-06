@@ -438,6 +438,93 @@ fn main() -> Result<(), std::io::Error>
                 }
             });
 
+
+            app.at("/user/delete")
+            .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let user_id = get_field(object, "user_id");
+                let mut guard = request.state().lock().unwrap();
+                Ok(match guard.users.get(&user_id)
+                {
+                    None => response_error("This user does not exist."),
+                    Some(_name) =>
+                    {
+                        if guard.user_groups.len() > 0
+                        {
+                            let iter1 = guard.user_groups.iter();
+                            let iter2 = guard.user_groups.iter();
+                            let collection = iter1.filter(|&x| x.0.user_id == user_id);
+                            let collect_copy = iter2.filter(|&x| x.0.user_id == user_id);
+                            let closed_collect = collection.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &true);
+                            let free_collect = collect_copy.filter(|&x| guard.groups.get(&x.0.group_id).unwrap() == &false);
+                            let mut admin_flag = false;
+                            let mut vec:Vec<Id> = Vec::new();
+                            let mut delete_vec=Vec::new();
+                            for x in free_collect
+                            {
+                                if x.1.access_level == Access::Admin && count_admins(x.0.group_id, &guard.user_groups) == 1
+                                {
+                                    admin_flag=true;
+                                    vec.push(x.0.group_id);
+                                }
+                                else 
+                                {
+                                    delete_vec.push(UserGroupId{user_id: user_id, group_id: x.0.group_id});
+                                }
+                            }   
+                            if closed_collect.count() > 0
+                            {
+                                for x in delete_vec
+                                {
+                                    guard.user_groups.remove(&x);
+                                }
+                                if admin_flag == true
+                                {
+                                    let mut string: String="User has closed groups. So he was deleted from opened groups, if he wasn't last admin. User cannot be delete from groups: ".to_string();
+                                    for x in vec
+                                    {
+                                            string+=format!("{0}, ", x).as_str();
+                                    }
+                                    string+="because of last admin.";
+                                    response_error(string.as_str())
+                                }
+                                else
+                                {
+                                    response_error("User has closed groups. So he was deleted from opened groups.")
+                                }
+                            }
+                            else 
+                            {
+                                for x in delete_vec
+                                {
+                                    guard.user_groups.remove(&x);
+                                }
+                                if admin_flag == false
+                                {
+                                    guard.users.remove(&user_id);
+                                    response_empty()
+                                }
+                                else 
+                                {
+                                    let mut string: String="User cannot be delete from groups: ".to_string();
+                                    for x in vec
+                                    {
+                                        string+=format!("{0}, ", x).as_str();
+                                    }
+                                    string+="because he is the last admin in these groups.";
+                                    response_error(string.as_str())
+                                }
+                            }
+                        }
+                        else
+                        {
+                            guard.users.remove(&user_id);
+                            response_empty()
+                        }
+                    }
+                })
+            });
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
