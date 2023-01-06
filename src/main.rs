@@ -371,26 +371,27 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
-
         app.at("/group/secret_santa")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let group_id: Id = get_field(object, "group_id");
                 let admin_id: Id = get_field(object, "admin_id");
+
                 let mut guard = request.state().lock().unwrap();
-                let admin: &UserGroupProps;
-
-                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id: group_id}){
-                    None => response_error("no such user"),
-                    Some(res) => {
-                        admin = res;
-                        if admin.access_level == Access::Admin{
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
+                {
+                    None => response_error("user does not belong to this group"),
+                    Some(user_group_props) =>
+                    {
+                        if user_group_props.access_level != Access::Admin
+                        {
+                            response_error("its not admin")
+                        }
+                        else
+                        {
                             *guard.groups.get_mut(&(group_id)).unwrap() = true;
-
-
                             let mut count = 0;
-
                             //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
                             //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
                             //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
@@ -400,27 +401,21 @@ fn main() -> Result<(), std::io::Error>
                             //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
                             //4-5
                             //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-
-
-                            for (key, mut val) in guard.user_groups.clone() {
-                                if key.group_id == group_id {
+                            for key in guard.user_groups.clone().keys()
+                            {
+                                if key.group_id == group_id
+                                {
                                     count += 1;
                                     let mut santa_id = key.user_id + 1;
-                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id: group_id})
+                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id})
                                     {
                                         santa_id -= count;
                                         count = 0;
                                     }
-                                    val.santa_id = santa_id;
-
-                                    *guard.user_groups.get_mut(&key).unwrap() = val;
+                                    guard.user_groups.get_mut(&key).unwrap().santa_id = santa_id;
                                 }
                             }
                             response_empty()
-
-                        }
-                        else {
-                            response_error("something went wrong")
                         }
                     }
                 })
