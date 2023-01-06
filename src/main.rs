@@ -420,6 +420,23 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
+            app.at("/user/update")
+            .put(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let id : Id = get_field(object, "id");
+                let name: String = get_field(object, "name");
+                let mut guard = request.state().lock().unwrap();
+                if !guard.users.contains_key(&id)
+                {
+                    return Ok(response_error("No such id"));
+                }
+                else
+                {
+                    guard.users.entry(id).and_modify(|k| *k = name);
+                    return Ok(response_empty());
+                }
+            });
 
         app.listen("127.0.0.1:8080").await
     };
