@@ -331,7 +331,7 @@ fn main() -> Result<(), std::io::Error>
                 else
                 {
                     let temp_user_group_id = guard.user_groups.get(&UserGroupId { user_id: (user_id), group_id: (group_id) });
-                    if (temp_user_group_id.unwrap().access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2)
+                    if temp_user_group_id.unwrap().access_level == Access::Admin && count_admins(group_id, &guard.user_groups) < 2
                     {
                         response_error("user_id is only one Admin in group_id")
                     }
@@ -341,8 +341,8 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
-            app.at("/group/target_by_id/:user_id/:group_id")
-            .get(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
+        app.at("/group/target_by_id/:user_id/:group_id")
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move{
                 let first_id = request.param("user_id")?;
                 let second_id = request.param("group_id")?;
                 for c in first_id.chars() {
@@ -361,8 +361,9 @@ fn main() -> Result<(), std::io::Error>
                     user_id,
                     group_id
                 };
-                let mut guard = request.state().lock().unwrap();
-                if(guard.user_groups.contains_key(&from_user)){
+
+                let guard = request.state().lock().unwrap();
+                if guard.user_groups.contains_key(&from_user){
                     let need_user  = guard.user_groups.get(&from_user).unwrap();
                     let need_user_id = need_user.santa_id;
                     return Ok(response_data(json!({"cysh_for_id": need_user_id})));
@@ -370,6 +371,7 @@ fn main() -> Result<(), std::io::Error>
                     return Ok(response_error("bad user or group id"));
                 }
             });
+        
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
