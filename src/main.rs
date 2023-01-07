@@ -113,26 +113,18 @@ fn is_admin(user_id: Id, group_id: Id, map: &HashMap<UserGroupId, UserGroupProps
     ).unwrap().access_level == Access::Admin
 }
 
-fn get_secret_santas(group: &Vec<Id>) -> HashMap<Id, Id>
+fn get_secret_santas(group: &Vec<Id>) -> Vec<Id>
 {
-    let mut secret_santas = HashMap::new();
-    let mut is_first = true;
-    let mut prev: Id = 0;
-    let mut first: Id = 0;
-    let mut last :Id = 0;
-    for user_id in group{
-        if is_first{
-            is_first = false;
-            prev = *user_id;
-            first = *user_id;
-            continue;
-        }
-        secret_santas.insert(*user_id, prev);
-        prev = *user_id;
-        last = *user_id;
+    //Пользователю присваивается santa_id = Id предыдущего в group
+    //Первому присваивается последний
+    let mut result = Vec::with_capacity(group.len());
+    result.push(0);
+    for i in 0..(group.len() - 1)
+    {
+        result.push(group[i]);
     }
-    secret_santas.insert(first, last);
-    secret_santas
+    result[0] = group[group.len() - 1];
+    result
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -405,56 +397,50 @@ fn main() -> Result<(), std::io::Error>
                 {
                     None => response_error("user does not belong to this group"),
                     Some(user_group_props) =>
+                    {
+                        if user_group_props.access_level != Access::Admin
                         {
-                            if user_group_props.access_level != Access::Admin
-                            {
-                                response_error("its not admin")
-                            }
-                            else
-                            {
-                                *guard.groups.get_mut(&(group_id)).unwrap() = true;
-
-                                //Пользователю присваивается тайный кыш бабай, предыдущий в списке группы.
-                                //Если пользователь первый, то ему присвается кыш бабай последний пользователь группы
-
-
-                                let group: Vec<Id> = guard.user_groups.keys().filter_map(|key|
-                                    match key.group_id == group_id
-                                    {
-                                        true => Some(key.user_id),
-                                        false => None,
-                                    }
-                                ).collect();
-                                let santas: HashMap<Id, Id> = get_secret_santas(&group);
-                                for user_id in group
-                                {
-                                    guard.user_groups.get_mut(&UserGroupId{user_id, group_id}).unwrap().santa_id = *santas.get(&user_id).unwrap();
-                                }
-                                response_empty()
-                            }
+                            response_error("its not admin")
                         }
+                        else
+                        {
+                            *guard.groups.get_mut(&(group_id)).unwrap() = true;
+                            let group: Vec<Id> = guard.user_groups.keys().filter_map(|key|
+                                match key.group_id == group_id
+                                {
+                                    true => Some(key.user_id),
+                                    false => None,
+                                }
+                            ).collect();
+                            let santas = get_secret_santas(&group);
+                            for i in 0..group.len()
+                            {
+                                guard.user_groups.get_mut(&UserGroupId{user_id: group[i], group_id}).unwrap().santa_id = santas[i];
+                            }
+                            response_empty()
+                        }
+                    }
                 })
             });
-            app.at("/user/update")
+        app.at("/user/update")
             .put(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let id : Id = get_field(object, "id");
                 let name: String = get_field(object, "name");
                 let mut guard = request.state().lock().unwrap();
-                if !guard.users.contains_key(&id)
+                Ok( if !guard.users.contains_key(&id)
                 {
-                    return Ok(response_error("No such id"));
+                    response_error("No such id")
                 }
                 else
                 {
                     guard.users.entry(id).and_modify(|k| *k = name);
-                    return Ok(response_empty());
-                }
+                    response_empty()
+                })
             });
 
-
-            app.at("/user/delete")
+        app.at("/user/delete")
             .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
@@ -540,6 +526,7 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
+        
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
