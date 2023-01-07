@@ -113,6 +113,28 @@ fn is_admin(user_id: Id, group_id: Id, map: &HashMap<UserGroupId, UserGroupProps
     ).unwrap().access_level == Access::Admin
 }
 
+fn get_secret_santas(group: &Vec<Id>) -> HashMap<Id, Id>
+{
+    let mut secret_santas = HashMap::new();
+    let mut is_first = true;
+    let mut prev: Id = 0;
+    let mut first: Id = 0;
+    let mut last :Id = 0;
+    for user_id in group{
+        if is_first{
+            is_first = false;
+            prev = *user_id;
+            first = *user_id;
+            continue;
+        }
+        secret_santas.insert(*user_id, prev);
+        prev = *user_id;
+        last = *user_id;
+    }
+    secret_santas.insert(first, last);
+    secret_santas
+}
+
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
@@ -383,41 +405,34 @@ fn main() -> Result<(), std::io::Error>
                 {
                     None => response_error("user does not belong to this group"),
                     Some(user_group_props) =>
-                    {
-                        if user_group_props.access_level != Access::Admin
                         {
-                            response_error("its not admin")
-                        }
-                        else
-                        {
-                            *guard.groups.get_mut(&(group_id)).unwrap() = true;
-                            let mut count = 0;
-                            //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
-                            //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
-                            //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
-                            //Например: из нужной группы пользователи с id 0, 1, 2, 4, 5. Тайный кыш бабай распределится таким образом
-                            //0-1
-                            //1-2
-                            //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
-                            //4-5
-                            //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-                            for key in guard.user_groups.clone().keys()
+                            if user_group_props.access_level != Access::Admin
                             {
-                                if key.group_id == group_id
-                                {
-                                    count += 1;
-                                    let mut santa_id = key.user_id + 1;
-                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id})
-                                    {
-                                        santa_id -= count;
-                                        count = 0;
-                                    }
-                                    guard.user_groups.get_mut(&key).unwrap().santa_id = santa_id;
-                                }
+                                response_error("its not admin")
                             }
-                            response_empty()
+                            else
+                            {
+                                *guard.groups.get_mut(&(group_id)).unwrap() = true;
+
+                                //Пользователю присваивается тайный кыш бабай, предыдущий в списке группы.
+                                //Если пользователь первый, то ему присвается кыш бабай последний пользователь группы
+
+
+                                let group: Vec<Id> = guard.user_groups.keys().filter_map(|key|
+                                    match key.group_id == group_id
+                                    {
+                                        true => Some(key.user_id),
+                                        false => None,
+                                    }
+                                ).collect();
+                                let santas: HashMap<Id, Id> = get_secret_santas(&group);
+                                for user_id in group
+                                {
+                                    guard.user_groups.get_mut(&UserGroupId{user_id, group_id}).unwrap().santa_id = *santas.get(&user_id).unwrap();
+                                }
+                                response_empty()
+                            }
                         }
-                    }
                 })
             });
             app.at("/user/update")
