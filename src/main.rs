@@ -113,30 +113,17 @@ fn is_admin(user_id: Id, group_id: Id, map: &HashMap<UserGroupId, UserGroupProps
     ).unwrap().access_level == Access::Admin
 }
 
-fn get_secret_santas(group: &Vec<Id>) -> HashMap<Id, Id>
+fn get_secret_santas(group: &Vec<Id>) -> Vec<Id>
 {
     //Пользователю присваивается santa_id = Id предыдущего в group
     //Первому присваивается последний
-    let mut result = HashMap::new();
-    let mut is_first_step = true;
-    let mut prev: Id = 0;
-    let mut first: Id = 0;
-    let mut last: Id = 0;
-    for &user_id in group
+    let mut result = Vec::with_capacity(group.len());
+    result.push(0);
+    for i in 0..(group.len() - 1)
     {
-        if is_first_step
-        {
-            is_first_step = false;
-            first = user_id;
-        }
-        else
-        {
-            result.insert(user_id, prev);
-            last = user_id;
-        }
-        prev = user_id;
+        result.push(group[i]);
     }
-    result.insert(first, last);
+    result[0] = group[group.len() - 1];
     result
 }
 
@@ -425,10 +412,10 @@ fn main() -> Result<(), std::io::Error>
                                     false => None,
                                 }
                             ).collect();
-                            let santas: HashMap<Id, Id> = get_secret_santas(&group);
-                            for user_id in group
+                            let santas = get_secret_santas(&group);
+                            for i in 0..group.len()
                             {
-                                guard.user_groups.get_mut(&UserGroupId{user_id, group_id}).unwrap().santa_id = *santas.get(&user_id).unwrap();
+                                guard.user_groups.get_mut(&UserGroupId{user_id: group[i], group_id}).unwrap().santa_id = santas[i];
                             }
                             response_empty()
                         }
