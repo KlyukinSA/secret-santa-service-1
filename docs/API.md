@@ -231,7 +231,7 @@ http://127.0.0.1:8080/group/target_by_id/0/ab
 ```json
 // In
 {
-  "id":2,
+  "user_id":2,
   "name":"Новое Имя"
 }
 // Out

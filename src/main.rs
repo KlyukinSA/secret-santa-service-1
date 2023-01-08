@@ -426,7 +426,7 @@ fn main() -> Result<(), std::io::Error>
             .put(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let id : Id = get_field(object, "id");
+                let id : Id = get_field(object, "user_id");
                 let name: String = get_field(object, "name");
                 let mut guard = request.state().lock().unwrap();
                 Ok( if !guard.users.contains_key(&id)
