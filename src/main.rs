@@ -260,14 +260,14 @@ fn main() -> Result<(), std::io::Error>
                 })
             });
         app.at("/group/delete")
-            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+            .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let admin_id = get_field(object, "admin_id");
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id: group_id})
                 {
                     None => response_error("user does not belong to this group"),
                     Some(user_group_props) =>
