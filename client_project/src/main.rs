@@ -3,9 +3,9 @@
 // Методы
 static METHODS: &'static [&str] = &["GET", "POST", "PUT", "DELETE"];
 static GET_COMMANDS: &'static [&str] = &["users", "groups", "group/target_by_id"];
-static POST_COMMANDS: &'static [&str] = &["user/create", "group/create", "group/join", "group/unadmin", "group/make_admin", "group/quit", "group/secret_santa", "group/delete"];
+static POST_COMMANDS: &'static [&str] = &["user/create", "group/create", "group/join", "group/unadmin", "group/make_admin", "group/quit", "group/secret_santa"];
 static PUT_COMMANDS: &'static [&str] = &["user/update"];
-static DELETE_COMMANDS: &'static [&str] = &["user/delete"];
+static DELETE_COMMANDS: &'static [&str] = &["user/delete", "group/delete"];
 
 // Файл с адресом сервера
 static SERVER_ADDRESS_FILE: &'static str = "address.conf";
