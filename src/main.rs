@@ -152,23 +152,6 @@ fn main() -> Result<(), std::io::Error>
                 let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
-        app.at("/group/list_admins")
-            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let body: Value = request.body_json().await?;
-                let object = body.as_object().unwrap();
-                let group_id: Id = get_field(object, "group_id");
-
-                let guard = request.state().lock().unwrap();
-                let admins: HashMap<&Id, &String> = guard.users.iter()
-                    .filter(|&x| guard.user_groups.contains_key(
-                        &UserGroupId {
-                            user_id: *x.0,
-                            group_id,
-                        }
-                    ) && is_admin(*x.0, group_id, &guard.user_groups))
-                    .collect();
-                Ok(json!(admins))
-            });
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
@@ -341,6 +324,34 @@ fn main() -> Result<(), std::io::Error>
                     response_empty()
                 }
             )});
+        app.at("/group/list_admins/:group_id")
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
+                let raw_id = request.param("group_id")?;
+                for c in raw_id.chars() {
+                    if !c.is_numeric() {
+                        return Ok(response_error("wrong format group_id"));
+                    } 
+                }
+                let group_id: Id = raw_id.parse().unwrap();
+
+                let guard = request.state().lock().unwrap();
+                let admins: HashMap<&Id, &String> = guard.users.iter()
+                    .filter(|&x| guard.user_groups.contains_key(
+                        &UserGroupId {
+                            user_id: *x.0,
+                            group_id,
+                        }
+                    ) && is_admin(*x.0, group_id, &guard.user_groups))
+                    .collect();
+                Ok(if !guard.groups.contains_key(&group_id)
+                {
+                    response_error("no such group")
+                }
+                else
+                {
+                    response_data(json!(admins))
+                })
+            });
         app.at("/group/quit")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
