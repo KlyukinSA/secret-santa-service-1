@@ -113,6 +113,20 @@ fn is_admin(user_id: Id, group_id: Id, map: &HashMap<UserGroupId, UserGroupProps
     ).unwrap().access_level == Access::Admin
 }
 
+fn get_secret_santas(group: &Vec<Id>) -> Vec<Id>
+{
+    //Пользователю присваивается santa_id = Id предыдущего в group
+    //Первому присваивается последний
+    let mut result = Vec::with_capacity(group.len());
+    result.push(0);
+    for i in 0..(group.len() - 1)
+    {
+        result.push(group[i]);
+    }
+    result[0] = group[group.len() - 1];
+    result
+}
+
 fn main() -> Result<(), std::io::Error> 
 {
     let f = async {
@@ -262,14 +276,14 @@ fn main() -> Result<(), std::io::Error>
                 })
             });
         app.at("/group/delete")
-            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+            .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
                 let admin_id = get_field(object, "admin_id");
                 let group_id = get_field(object, "group_id");
 
                 let mut guard = request.state().lock().unwrap();
-                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id})
+                Ok(match guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id: group_id})
                 {
                     None => response_error("user does not belong to this group"),
                     Some(user_group_props) =>
@@ -407,55 +421,42 @@ fn main() -> Result<(), std::io::Error>
                         else
                         {
                             *guard.groups.get_mut(&(group_id)).unwrap() = true;
-                            let mut count = 0;
-                            //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
-                            //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
-                            //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
-                            //Например: из нужной группы пользователи с id 0, 1, 2, 4, 5. Тайный кыш бабай распределится таким образом
-                            //0-1
-                            //1-2
-                            //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
-                            //4-5
-                            //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-                            for key in guard.user_groups.clone().keys()
-                            {
-                                if key.group_id == group_id
+                            let group: Vec<Id> = guard.user_groups.keys().filter_map(|key|
+                                match key.group_id == group_id
                                 {
-                                    count += 1;
-                                    let mut santa_id = key.user_id + 1;
-                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id})
-                                    {
-                                        santa_id -= count;
-                                        count = 0;
-                                    }
-                                    guard.user_groups.get_mut(&key).unwrap().santa_id = santa_id;
+                                    true => Some(key.user_id),
+                                    false => None,
                                 }
+                            ).collect();
+                            let santas = get_secret_santas(&group);
+                            for i in 0..group.len()
+                            {
+                                guard.user_groups.get_mut(&UserGroupId{user_id: group[i], group_id}).unwrap().santa_id = santas[i];
                             }
                             response_empty()
                         }
                     }
                 })
             });
-            app.at("/user/update")
+        app.at("/user/update")
             .put(|mut request: Request<Arc<Mutex<DataBase>>>| async move{
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let id : Id = get_field(object, "id");
+                let id : Id = get_field(object, "user_id");
                 let name: String = get_field(object, "name");
                 let mut guard = request.state().lock().unwrap();
-                if !guard.users.contains_key(&id)
+                Ok( if !guard.users.contains_key(&id)
                 {
-                    return Ok(response_error("No such id"));
+                    response_error("No such id")
                 }
                 else
                 {
                     guard.users.entry(id).and_modify(|k| *k = name);
-                    return Ok(response_empty());
-                }
+                    response_empty()
+                })
             });
 
-
-            app.at("/user/delete")
+        app.at("/user/delete")
             .delete(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
@@ -541,6 +542,7 @@ fn main() -> Result<(), std::io::Error>
                     }
                 })
             });
+        
         app.listen("127.0.0.1:8080").await
     };
     futures::executor::block_on(f)
