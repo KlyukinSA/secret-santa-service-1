@@ -152,7 +152,6 @@ fn main() -> Result<(), std::io::Error>
                 let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
-        
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
@@ -325,6 +324,37 @@ fn main() -> Result<(), std::io::Error>
                     response_empty()
                 }
             )});
+        app.at("/group/list_admins/:group_id")
+            .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
+                let raw_id = request.param("group_id")?;
+                let guard = request.state().lock().unwrap();
+                Ok(match raw_id.parse().ok()
+                {
+                    None => response_error("wrong format group_id"),
+                    Some(group_id) =>
+                    {
+                        if !guard.groups.contains_key(&group_id)
+                        {
+                            response_error("no such group")
+                        }
+                        else
+                        {
+                            let admins: HashMap<&Id, &String> = guard.users.iter()
+                            .filter(|&x| match guard.user_groups.get(
+                                &UserGroupId {
+                                    user_id: *x.0,
+                                    group_id,
+                                })
+                            {
+                                None => false,
+                                Some(user_group_props) => user_group_props.access_level == Access::Admin
+                            })
+                            .collect();
+                            response_data(json!(admins))
+                        }
+                    },
+                })
+            });
         app.at("/group/quit")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
