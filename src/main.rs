@@ -327,29 +327,32 @@ fn main() -> Result<(), std::io::Error>
         app.at("/group/list_admins/:group_id")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
                 let raw_id = request.param("group_id")?;
-                for c in raw_id.chars() {
-                    if !c.is_numeric() {
-                        return Ok(response_error("wrong format group_id"));
-                    } 
-                }
-                let group_id: Id = raw_id.parse().unwrap();
-
                 let guard = request.state().lock().unwrap();
-                let admins: HashMap<&Id, &String> = guard.users.iter()
-                    .filter(|&x| guard.user_groups.contains_key(
-                        &UserGroupId {
-                            user_id: *x.0,
-                            group_id,
+                Ok(match raw_id.parse().ok()
+                {
+                    None => response_error("wrong format group_id"),
+                    Some(group_id) =>
+                    {
+                        if !guard.groups.contains_key(&group_id)
+                        {
+                            response_error("no such group")
                         }
-                    ) && is_admin(*x.0, group_id, &guard.user_groups))
-                    .collect();
-                Ok(if !guard.groups.contains_key(&group_id)
-                {
-                    response_error("no such group")
-                }
-                else
-                {
-                    response_data(json!(admins))
+                        else
+                        {
+                            let admins: HashMap<&Id, &String> = guard.users.iter()
+                            .filter(|&x| match guard.user_groups.get(
+                                &UserGroupId {
+                                    user_id: *x.0,
+                                    group_id,
+                                })
+                            {
+                                None => false,
+                                Some(user_group_props) => user_group_props.access_level == Access::Admin
+                            })
+                            .collect();
+                            response_data(json!(admins))
+                        }
+                    },
                 })
             });
         app.at("/group/quit")
